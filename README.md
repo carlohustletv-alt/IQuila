@@ -63,7 +63,7 @@ IQuila is in its initial setup phase. Core files, source code, datasets, noteboo
 
 ## Ownership And Usage
 
-Copyright (c) 2026 IQuila Project Owner. All rights reserved.
+Copyright (c) 2026 carlohustletv. All rights reserved.
 
 This repository and its contents are proprietary unless a license file is added that explicitly grants additional permissions. Do not copy, redistribute, publish, sublicense, or use this work in another project without written permission from the owner.
 
