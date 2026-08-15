@@ -1,0 +1,38 @@
+{
+  "name": "flockiq",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace apps/api",
+    "dev:api": "npm run dev --workspace apps/api",
+    "dev:web": "npm run dev --workspace apps/web",
+    "dev:mobile": "npm run start --workspace apps/mobile",
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "seed:demo": "node scripts/seed-demo-data.mjs",
+    "test:roles": "node scripts/test-role-isolation.mjs",
+    "test:mobile-supabase": "node scripts/test-mobile-supabase.mjs",
+    "deploy:edge": "npx supabase functions deploy flockiq-api --project-ref vyvphaxucpzjjmjndbxw --no-verify-jwt --use-api"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "overrides": {
+    "react": "19.0.0",
+    "react-dom": "19.0.0"
+  },
+  "dependencies": {
+    "react": "19.0.0",
+    "react-dom": "19.0.0"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.21.0",
+    "pg": "^8.23.0"
+  }
+}

@@ -1,0 +1,6 @@
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+  <item android:drawable="@color/splashscreen_background"/>
+  <item android:width="180dp" android:height="180dp" android:gravity="center">
+    <inset android:drawable="@drawable/iquila_mark" android:inset="18dp"/>
+  </item>
+</layer-list>
