@@ -283,7 +283,7 @@ const { error: auditError } = await supabase.from("audit_logs").insert(auditRows
 if (auditError) throw auditError;
 
 console.log(JSON.stringify({
-  users: users.map(({ email, password, name }) => ({ email, password, name })),
+  users: users.map(({ email, name }) => ({ email, name })),
   farms: 2,
   units: 4,
   flocks: 4,

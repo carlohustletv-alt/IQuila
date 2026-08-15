@@ -150,4 +150,4 @@ await supabase.from("daily_records").upsert(
   { onConflict: "farm_id,idempotency_key" }
 );
 
-console.log(JSON.stringify({ email, password, farm: "Demo Poultry Farm", flock: "Demo Broiler Batch A" }, null, 2));
+console.log(JSON.stringify({ email, farm: "Demo Poultry Farm", flock: "Demo Broiler Batch A" }, null, 2));
