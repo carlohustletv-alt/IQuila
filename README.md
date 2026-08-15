@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo.svg" alt="IQuila logo" width="720">
+</p>
+
 # IQuila
 
 IQuila is a modern software project workspace prepared for development, data analytics, and future application delivery.
