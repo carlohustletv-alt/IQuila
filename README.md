@@ -6,6 +6,18 @@
 
 IQuila is an offline-first poultry management system with a web app for owners and managers, an Android app for daily farm work, and Supabase for database, authentication, storage, and Edge API services.
 
+## Features
+
+- Farm, flock, team, and role-based access management.
+- Offline Android daily logging for mortality, feed consumption, egg collection, and field notes.
+- Secure synchronization of queued records when connectivity returns.
+- Time-stamped photo evidence with best-effort GPS: fresh GPS when available, an honestly labelled last-known location fallback, or an unavailable-location stamp without blocking capture.
+- Private evidence storage, signed image access, and manager review.
+- Web notifications when field records or evidence are synchronized.
+- Farm reports, recent-history views, and flock-scoped PDF exports.
+- Explainable flock trend advisories that compare recent mortality, feed, water, and egg signals with each flock's own baseline, forecast the next two days, and recommend operational checks.
+- Advisory safeguards: insufficient-data states, role-visible data scope, no disease diagnosis, no medication advice, and veterinary escalation guidance for sudden or continuing mortality.
+
 ## Applications
 
 - `apps/api`: TypeScript API server for secure business endpoints.
@@ -31,4 +43,6 @@ Never commit real Supabase secret keys. See `SECURITY.md` before connecting a de
 
 ## License
 
-Copyright (C) 2026 carlohustletv. This project is licensed under the GNU General Public License v3.0. See `LICENSE`.
+Copyright (C) 2026 carlohustletv. IQuila is licensed under the GNU General Public License v3.0 only (`GPL-3.0-only`). See `LICENSE`.
+
+You may run, study, modify, and redistribute the source under GPL-3.0 terms. Distributed modified versions must remain under GPL-3.0 and include corresponding source code. The software is provided without warranty.
