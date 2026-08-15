@@ -29,8 +29,6 @@ IQuila is an offline-first poultry management system with a web app for owners a
 
 Never commit real Supabase secret keys. See `SECURITY.md` before connecting a deployment or GitHub integration.
 
-## Ownership And Usage
+## License
 
-Copyright (c) 2026 carlohustletv. All rights reserved.
-
-This repository and its contents are proprietary unless a license file is added that explicitly grants additional permissions. Do not copy, redistribute, publish, sublicense, or use this work in another project without written permission from the owner.
+Copyright (C) 2026 carlohustletv. This project is licensed under the GNU General Public License v3.0. See `LICENSE`.
