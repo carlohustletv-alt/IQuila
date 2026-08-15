@@ -1,6 +1,7 @@
 import type { Session } from "@supabase/supabase-js";
 import { useEffect, useRef, useState } from "react";
 import { Alert, Image, PermissionsAndroid, Platform, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { predictFlockManagement, type FlockAdvisory } from "@flockiq/shared";
 import { fetchAssignedFarms, fetchFarmFlocks, fetchMyDailyRecords, pushDailyRecords, type FarmListItem, type Flock, type RemoteDailyRecord } from "./src/api";
 import { captureFieldEvidence, fetchVisibleEvidence, getEvidenceQueue, getLocationStatus, syncEvidenceQueue, type LocationStatus, type PendingEvidence, type RemoteEvidence } from "./src/evidence";
 import { Logo } from "./src/Logo";
@@ -325,11 +326,29 @@ export default function App() {
   const canCaptureEvidence = Boolean(selectedFarm && selectedFarm.role !== "viewer" && selectedFarm.permissions.evidence);
   const totalPending = pendingCount + pendingEvidence.length;
   const selectedPendingEvidence = pendingEvidence.filter((item) => item.farmId === selectedFarmId);
-  const visibleRecords = (() => {
+  const allVisibleRecords = (() => {
     const byKey = new Map<string, PendingDailyRecord>(remoteRecords.map((record) => [record.idempotency_key, { ...record, sync_status: "synced" }]));
     localRecords.forEach((record) => byKey.set(record.idempotency_key, record));
-    return [...byKey.values()].sort((a, b) => b.record_date.localeCompare(a.record_date)).slice(0, 8);
+    return [...byKey.values()].sort((a, b) => b.record_date.localeCompare(a.record_date));
   })();
+  const visibleRecords = allVisibleRecords.slice(0, 8);
+  const selectedFlockAdvisory = selectedFlock ? predictFlockManagement({
+    id: selectedFlock.id,
+    name: selectedFlock.name,
+    poultryType: selectedFlock.poultry_type,
+    initialCount: selectedFlock.initial_count,
+    currentCount: selectedFlock.current_count,
+    startDate: selectedFlock.start_date
+  }, allVisibleRecords.map((record) => ({
+    flockId: record.flock_id,
+    recordDate: record.record_date,
+    mortalityCount: record.mortality_count,
+    cullingCount: record.culling_count,
+    feedKg: record.feed_consumed_kg,
+    waterLiters: record.water_consumed_liters,
+    eggsCollected: record.eggs_collected,
+    averageWeightGrams: record.average_weight_grams
+  }))) : null;
 
   if (!session) {
     return (
@@ -439,6 +458,7 @@ export default function App() {
           <View>
             <View style={styles.workspaceHeader}><View><Text style={styles.sectionEyebrow}>04 / Logbook</Text><Text style={styles.workspaceTitle}>{canLogRecords ? "My recent reports" : "Visible reports"}</Text></View><Text style={styles.countBlock}>{visibleRecords.length}</Text></View>
             <Text style={styles.helper}>Recent reports for {selectedFarm?.farms.name || "this farm"}. Export is scoped to the selected flock: {selectedFlock?.name || "all visible flocks"}.</Text>
+            {selectedFlockAdvisory ? <MobileAdvisory advisory={selectedFlockAdvisory} scope={selectedFarm?.role === "owner" || selectedFarm?.role === "manager" ? "farm-visible flock records" : "your visible records"} /> : null}
             <TouchableOpacity accessibilityRole="button" style={styles.exportButton} onPress={exportPdf}><Text style={styles.exportCode}>PDF / {selectedFlock?.name || "ALL FLOCKS"}</Text><Text style={styles.exportText}>Generate field report</Text></TouchableOpacity>
             {visibleRecords.map((record) => <View style={styles.recordRow} key={record.idempotency_key}><View style={styles.recordCopy}><Text style={styles.recordDate}>{record.record_date}</Text><Text style={styles.recordMeta}>Mortality {record.mortality_count} / Feed {record.feed_consumed_kg ?? 0}kg / Eggs {record.eggs_collected ?? 0}</Text>{record.notes ? <Text style={styles.recordNotes}>{record.notes}</Text> : null}</View><Text style={record.sync_status === "synced" ? styles.synced : styles.pending}>{record.sync_status}</Text></View>)}
             {!visibleRecords.length ? <Text style={styles.emptyText}>No reports yet. Save a daily run to begin.</Text> : null}
@@ -452,6 +472,15 @@ export default function App() {
       </ScrollView>
     </SafeAreaView>
   );
+}
+
+function MobileAdvisory({ advisory, scope }: { advisory: FlockAdvisory; scope: string }) {
+  return <View style={[styles.advisoryCard, advisory.severity === "urgent" && styles.advisoryUrgent, advisory.severity === "watch" && styles.advisoryWatch]}>
+    <Text style={styles.advisoryCode}>IQUILA / FLOCK FORECAST / {scope}</Text>
+    <View style={styles.advisoryHeader}><Text style={styles.advisoryTitle}>{advisory.severity === "insufficient" ? "Need more daily records" : `${advisory.severity} trend`}</Text><Text style={styles.advisoryBadge}>{advisory.confidence}</Text></View>
+    {advisory.severity === "insufficient" ? <Text style={styles.advisoryText}>Record {Math.max(0, 5 - advisory.recordDays)} more distinct day{5 - advisory.recordDays === 1 ? "" : "s"} for this flock before using its trend forecast.</Text> : <><Text style={styles.advisoryForecast}>Next 2 days: {advisory.forecast.mortalityNext2Days} mortality/culls{advisory.forecast.feedKgNext2Days === null ? "" : ` / ${advisory.forecast.feedKgNext2Days} kg feed`}{advisory.forecast.eggsNext2Days === null ? "" : ` / ${advisory.forecast.eggsNext2Days} eggs`}</Text>{advisory.alerts.map((alert) => <View key={alert.title} style={styles.advisoryAlert}><Text style={styles.advisoryAlertTitle}>{alert.title}</Text><Text style={styles.advisoryText}>{alert.observation}</Text><Text style={styles.advisoryAction}>{alert.action}</Text></View>)}</>}
+    <Text style={styles.advisoryDisclaimer}>{advisory.disclaimer}</Text>
+  </View>;
 }
 
 const styles = StyleSheet.create({
@@ -489,6 +518,19 @@ const styles = StyleSheet.create({
   dateBlock: { backgroundColor: colors.amber, borderRadius: 9, color: colors.ink, fontSize: 13, fontWeight: "900", overflow: "hidden", paddingHorizontal: 10, paddingVertical: 8 },
   countBlock: { backgroundColor: colors.forest, borderRadius: 9, color: colors.white, fontSize: 16, fontWeight: "900", minWidth: 38, overflow: "hidden", paddingHorizontal: 10, paddingVertical: 8, textAlign: "center" },
   helper: { color: colors.muted, fontSize: 13, lineHeight: 20, marginBottom: 17, marginHorizontal: 18 },
+  advisoryCard: { backgroundColor: colors.white, borderColor: colors.line, borderLeftColor: colors.tealDark, borderLeftWidth: 4, borderRadius: 13, borderWidth: 1, marginBottom: 15, marginHorizontal: 18, padding: 15 },
+  advisoryWatch: { borderLeftColor: colors.amber },
+  advisoryUrgent: { borderLeftColor: colors.danger },
+  advisoryCode: { color: colors.tealDark, fontSize: 8, fontWeight: "900", letterSpacing: 1 },
+  advisoryHeader: { alignItems: "center", flexDirection: "row", justifyContent: "space-between", marginTop: 7 },
+  advisoryTitle: { color: colors.text, fontSize: 17, fontWeight: "900", textTransform: "capitalize" },
+  advisoryBadge: { backgroundColor: colors.mist, borderRadius: 7, color: colors.muted, fontSize: 9, fontWeight: "900", overflow: "hidden", paddingHorizontal: 7, paddingVertical: 4, textTransform: "uppercase" },
+  advisoryForecast: { color: colors.text, fontSize: 12, fontWeight: "900", lineHeight: 18, marginTop: 11 },
+  advisoryAlert: { borderTopColor: colors.line, borderTopWidth: 1, marginTop: 11, paddingTop: 10 },
+  advisoryAlertTitle: { color: colors.text, fontSize: 13, fontWeight: "900" },
+  advisoryText: { color: colors.muted, fontSize: 12, lineHeight: 18, marginTop: 3 },
+  advisoryAction: { color: colors.forestSoft, fontSize: 12, lineHeight: 18, marginTop: 6 },
+  advisoryDisclaimer: { color: colors.muted, fontSize: 10, fontStyle: "italic", lineHeight: 14, marginTop: 13 },
   locationCard: { alignItems: "center", backgroundColor: colors.white, borderColor: colors.line, borderRadius: 13, borderWidth: 1, flexDirection: "row", marginBottom: 16, marginHorizontal: 18, padding: 13 },
   locationCardAvailable: { backgroundColor: "#e4f3ed", borderColor: "#b7ddd0" },
   locationDot: { backgroundColor: colors.muted, borderRadius: 99, height: 10, marginRight: 11, width: 10 },

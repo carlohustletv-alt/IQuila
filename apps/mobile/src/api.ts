@@ -26,6 +26,8 @@ export interface Flock {
   farm_id: string;
   name: string;
   poultry_type: string;
+  start_date: string;
+  initial_count: number;
   current_count: number;
 }
 
@@ -73,7 +75,7 @@ export async function fetchAssignedFarms(): Promise<FarmListItem[]> {
 export async function fetchFarmFlocks(farmId: string): Promise<Flock[]> {
   const { data, error } = await supabase
     .from("flocks")
-    .select("id, farm_id, name, poultry_type, current_count")
+    .select("id, farm_id, name, poultry_type, start_date, initial_count, current_count")
     .eq("farm_id", farmId)
     .eq("status", "active")
     .is("deleted_at", null)

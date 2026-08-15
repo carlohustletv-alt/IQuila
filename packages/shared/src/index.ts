@@ -1,4 +1,5 @@
 export { brand } from "./brand";
+export { predictFlockManagement, type AdvisoryFlock, type AdvisoryRecord, type AdvisorySeverity, type FlockAdvisory, type ManagementAlert } from "./advisory";
 
 export const farmRoles = ["owner", "manager", "worker", "viewer"] as const;
 export type FarmRole = (typeof farmRoles)[number];

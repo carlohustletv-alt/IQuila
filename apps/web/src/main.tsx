@@ -1,6 +1,7 @@
 import type { Session } from "@supabase/supabase-js";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { createRoot } from "react-dom/client";
+import { predictFlockManagement } from "@flockiq/shared";
 import { apiRequest, type AdminOverview, type DailyReport, type DashboardData, type FarmListItem, type FarmMember, type FieldEvidence, type Flock, type ModulePermissions } from "./api";
 import { supabase } from "./supabase";
 import "./styles.css";
@@ -282,12 +283,16 @@ function Dashboard({ email, systemRole }: { email: string; systemRole: "user" | 
       dashboardRequest,
       canManageMembers
         ? apiRequest<{ members: FarmMember[] }>(`/api/farms/${selectedFarmId}/members`, { signal: controller.signal })
-        : Promise.resolve({ members: [] })
+        : Promise.resolve({ members: [] }),
+      canManageMembers
+        ? apiRequest<{ daily_records: DailyReport[] }>(`/api/farms/${selectedFarmId}/daily-records`, { signal: controller.signal })
+        : Promise.resolve({ daily_records: [] })
     ])
-      .then(([flockData, dashboardData, memberData]) => {
+      .then(([flockData, dashboardData, memberData, reportData]) => {
         setFlocks(flockData.flocks);
         setDashboard(dashboardData);
         setMembers(memberData.members);
+        setReports(reportData.daily_records);
       })
       .catch((error: Error) => { if (error.name !== "AbortError") setStatus(error.message); });
     return () => controller.abort();
@@ -545,7 +550,7 @@ function Dashboard({ email, systemRole }: { email: string; systemRole: "user" | 
         </div>
       </section>
 
-      {dashboard ? <FarmAnalytics dashboard={dashboard} /> : null}
+       {dashboard ? <><FarmAnalytics dashboard={dashboard} /><FlockAdvisories flocks={flocks} reports={reports} /></> : null}
       </> : null}
 
       {activeView !== "admin" ?
@@ -628,6 +633,41 @@ function formatNumber(value: number) {
 
 function formatShortDate(value: string) {
   return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(new Date(`${value}T00:00:00`));
+}
+
+function FlockAdvisories({ flocks, reports }: { flocks: Flock[]; reports: DailyReport[] }) {
+  const advisories = flocks.map((flock) => predictFlockManagement({
+    id: flock.id,
+    name: flock.name,
+    poultryType: flock.poultry_type,
+    initialCount: flock.initial_count,
+    currentCount: flock.current_count,
+    startDate: flock.start_date
+  }, reports.map((report) => ({
+    flockId: report.flock_id,
+    recordDate: report.record_date,
+    mortalityCount: report.mortality_count,
+    cullingCount: report.culling_count,
+    feedKg: report.feed_consumed_kg,
+    waterLiters: report.water_consumed_liters,
+    eggsCollected: report.eggs_collected,
+    averageWeightGrams: report.average_weight_grams
+  }))));
+
+  return <section className="advisoryPanel">
+    <div className="panelHeading"><div><p className="panelKicker">Decision support / trend model</p><h2>Flock adjustments to review</h2></div><span>Latest visible records</span></div>
+    <p className="advisoryIntro">Forecasts compare each flock&apos;s recent 3-7 recorded days with its own prior baseline. They flag checks to make, not diagnoses or treatment instructions.</p>
+    <div className="advisoryGrid">
+      {advisories.map((advisory) => <article className={`advisoryCard ${advisory.severity}`} key={advisory.flockId}>
+        <div className="advisoryTop"><div><strong>{advisory.flockName}</strong><span>{advisory.recordDays} record days · {advisory.confidence} confidence{advisory.ageWeeks === null ? "" : ` · week ${advisory.ageWeeks}`}</span></div><b>{advisory.severity}</b></div>
+        {advisory.severity === "insufficient" ? <p>Record at least {5 - advisory.recordDays} more distinct day{5 - advisory.recordDays === 1 ? "" : "s"} to start a flock trend forecast.</p> : <>
+          <div className="forecastLine"><span>Next 2 days</span><strong>{advisory.forecast.mortalityNext2Days} mortality/culls</strong>{advisory.forecast.feedKgNext2Days !== null ? <strong>{advisory.forecast.feedKgNext2Days} kg feed</strong> : null}{advisory.forecast.eggsNext2Days !== null ? <strong>{advisory.forecast.eggsNext2Days} eggs</strong> : null}</div>
+          {advisory.alerts.map((alert) => <div className="advisoryAlert" key={alert.title}><strong>{alert.title}</strong><span>{alert.observation}</span><p>{alert.action}</p></div>)}
+        </>}
+      </article>)}
+      {!advisories.length ? <p className="empty">Create a flock and add daily records to receive decision support.</p> : null}
+    </div>
+  </section>;
 }
 
 function FarmAnalytics({ dashboard }: { dashboard: DashboardData }) {

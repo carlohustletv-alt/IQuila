@@ -96,6 +96,7 @@ export interface DailyReport {
   feed_consumed_kg: number | null;
   water_consumed_liters: number | null;
   eggs_collected: number | null;
+  average_weight_grams: number | null;
   notes: string | null;
   created_by: string;
   created_at: string;
