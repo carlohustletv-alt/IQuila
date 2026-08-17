@@ -542,11 +542,10 @@ label {
 .distributionList b { background: #2c977f; border-radius: inherit; display: block; height: 100%; }
 .locationPanel { padding: 24px; }
 .locationMap { background: #dcefe4; border: 1px solid #bdd8c7; border-radius: 18px; height: 270px; margin-top: 16px; overflow: hidden; }
-.locationMap svg { display: block; height: 100%; width: 100%; }
-.locationMap path { fill: none; stroke: #a8c5b2; stroke-width: .25; }
-.locationMap text { fill: #5d7967; font-size: 5px; font-weight: 800; }
-.locationMap circle { fill: #e89225; stroke: #fffaf0; stroke-width: 1; }
-.locationMap .mapPointCore { fill: #1c4c31; stroke: none; }
+.locationLeafletMap { height: 100%; width: 100%; }
+.locationMap .leaflet-popup-content { color: #17201a; font-size: 12px; line-height: 1.5; }
+.locationMap .leaflet-popup-content strong { color: #1e4d2b; }
+.locationMap .leaflet-control-attribution { font-size: 9px; }
 .locationList { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin-top: 14px; }
 .locationList div { background: #f5f8f3; border-radius: 10px; padding: 10px; }
 .locationList strong, .locationList span { display: block; }
