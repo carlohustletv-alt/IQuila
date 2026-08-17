@@ -6,6 +6,21 @@
 
 IQuila is an offline-first poultry management system with a web app for owners and managers, an Android app for daily farm work, and Supabase for database, authentication, storage, and Edge API services.
 
+## About
+
+IQuila helps poultry operations keep farm, flock, personnel, evidence, and daily production records in one system. It is designed for field teams that need to continue recording work when connectivity is limited, then synchronize verified records when they are back online.
+
+The project includes a manager web console, an Android field application, a Supabase-backed data layer, and auditable role-based access controls. IQuila is independently maintained and distributed as free software under GPL-3.0-only.
+
+## Project Information
+
+- **Status:** Active development
+- **Primary platform:** Web console and Android field application
+- **Backend:** Supabase PostgreSQL, Storage, Auth, and Edge Functions
+- **License:** GNU General Public License v3.0 only
+- **Security policy:** See [`SECURITY.md`](SECURITY.md)
+- **Contributions:** Contributions must be compatible with `GPL-3.0-only` and include appropriate tests or verification notes.
+
 ## Features
 
 - Farm, flock, team, and role-based access management.
@@ -46,3 +61,11 @@ Never commit real Supabase secret keys. See `SECURITY.md` before connecting a de
 Copyright (C) 2026 carlohustletv. IQuila is licensed under the GNU General Public License v3.0 only (`GPL-3.0-only`). See `LICENSE`.
 
 You may run, study, modify, and redistribute the source under GPL-3.0 terms. Distributed modified versions must remain under GPL-3.0 and include corresponding source code. The software is provided without warranty.
+
+All application, package, script, and Supabase source is covered by `REUSE.toml`. Primary executable entry points also carry SPDX identifiers. Verify the repository licensing metadata with:
+
+```bash
+npm run check:license
+```
+
+The GitHub security workflow runs this check for every push and pull request. When distributing an APK, web bundle, or other binary, provide the corresponding source code, build files, Supabase migrations, and this license notice.
