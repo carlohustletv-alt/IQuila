@@ -526,6 +526,32 @@ label {
 .adminUser small { color: #718074; display: block; margin-top: 3px; }
 .adminUser button { font-size: 11px; padding: 8px 10px; }
 
+.adminInsights { display: grid; gap: 18px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.analyticsCard { min-height: 260px; padding: 22px; }
+.analyticsCard h2, .locationPanel h2 { margin: 4px 0 0; }
+.analyticsCard p, .mapDisclaimer { color: #718074; font-size: 13px; line-height: 1.5; margin: 8px 0 0; }
+.barChart { height: 145px; margin-top: 18px; overflow: hidden; }
+.barPlot { align-items: end; display: flex; gap: 3px; height: 100%; }
+.barColumn { align-items: center; display: flex; flex: 1; flex-direction: column; height: 100%; justify-content: end; min-width: 0; }
+.barColumn i { background: linear-gradient(180deg, #38a993, #176446); border-radius: 5px 5px 1px 1px; display: block; max-width: 20px; transition: height .2s ease; width: 100%; }
+.barColumn small { color: #879487; font-size: 8px; margin-top: 5px; transform: rotate(-45deg); white-space: nowrap; }
+.barValue { color: #32684d; font-size: 10px; font-weight: 800; height: 15px; }
+.distributionList { display: grid; gap: 17px; margin-top: 25px; }
+.distributionList > div > div { display: flex; font-size: 13px; justify-content: space-between; text-transform: capitalize; }
+.distributionList i { background: #e5ece3; border-radius: 10px; display: block; height: 9px; margin-top: 7px; overflow: hidden; }
+.distributionList b { background: #2c977f; border-radius: inherit; display: block; height: 100%; }
+.locationPanel { padding: 24px; }
+.locationMap { background: #dcefe4; border: 1px solid #bdd8c7; border-radius: 18px; height: 270px; margin-top: 16px; overflow: hidden; }
+.locationMap svg { display: block; height: 100%; width: 100%; }
+.locationMap path { fill: none; stroke: #a8c5b2; stroke-width: .25; }
+.locationMap text { fill: #5d7967; font-size: 5px; font-weight: 800; }
+.locationMap circle { fill: #e89225; stroke: #fffaf0; stroke-width: 1; }
+.locationMap .mapPointCore { fill: #1c4c31; stroke: none; }
+.locationList { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin-top: 14px; }
+.locationList div { background: #f5f8f3; border-radius: 10px; padding: 10px; }
+.locationList strong, .locationList span { display: block; }
+.locationList span { color: #718074; font-size: 11px; line-height: 1.45; margin-top: 3px; }
+
 .analyticsBlock {
   display: grid;
   gap: 18px;
@@ -982,6 +1008,7 @@ label {
   .erpNav { grid-template-columns: repeat(3, 1fr); }
   .sidebarUser { margin-top: 20px; }
   .adminMetrics { grid-template-columns: repeat(2, 1fr); }
+  .adminInsights { grid-template-columns: 1fr; }
   .authPage,
   .dashboardHero,
   .workspaceGrid,

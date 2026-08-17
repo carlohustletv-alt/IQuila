@@ -108,6 +108,14 @@ export interface AdminOverview {
   farms: { id: string; name: string; location: string | null; created_by: string; created_at: string }[];
   memberships: { id: string; farm_id: string; user_id: string | null; role: string; permissions: ModulePermissions; accepted_at: string | null }[];
   membership_audits: { id: string; actor_id: string | null; action: string; entity_table: string; entity_id: string | null; metadata: { previous_status?: string; new_status?: string; reason?: string }; created_at: string }[];
+  analytics: {
+    registrations: { date: string; count: number }[];
+    field_activity: { date: string; count: number }[];
+    membership_statuses: { status: "active" | "pending" | "suspended"; count: number }[];
+    account_types: { account_type: "manager" | "personnel"; count: number }[];
+    active_location_users: number;
+  };
+  locations: { user_id: string; full_name: string | null; email: string | null; farm_name: string; latitude: number; longitude: number; accuracy_meters: number | null; captured_at: string; received_at: string }[];
 }
 
 export interface Flock {
