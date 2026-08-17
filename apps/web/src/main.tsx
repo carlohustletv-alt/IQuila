@@ -455,15 +455,16 @@ function Dashboard({ email, systemRole }: { email: string; systemRole: "user" | 
       const previousParts = previousSignature.split("|");
       activitySignatureRef.current = nextSignature;
 
+      const changed = !initial && Boolean(previousSignature) && previousSignature !== nextSignature;
       if (activeView === "reports") setReports(reportData.daily_records);
       if (activeView === "evidence") setEvidence(evidenceData.evidence);
-      if (activeView === "dashboard") {
+      if (activeView === "dashboard" && changed) {
         apiRequest<DashboardData>(`/api/farms/${selectedFarmId}/dashboard`)
           .then((data) => { if (!cancelled) setDashboard(data); })
           .catch(() => undefined);
       }
 
-      if (initial || !previousSignature || previousSignature === nextSignature) return;
+      if (!changed) return;
 
       const reportCountChanged = reportCount > Number(previousParts[0]);
       const evidenceCountChanged = evidenceCount > Number(previousParts[2]);
@@ -481,7 +482,7 @@ function Dashboard({ email, systemRole }: { email: string; systemRole: "user" | 
     }
 
     checkForNewFieldData(true).catch(() => undefined);
-    const interval = window.setInterval(() => { checkForNewFieldData().catch(() => undefined); }, 30000);
+    const interval = window.setInterval(() => { checkForNewFieldData().catch(() => undefined); }, 60000);
     return () => {
       cancelled = true;
       window.clearInterval(interval);

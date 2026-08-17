@@ -5,6 +5,7 @@ import { z } from "zod";
 
 type FarmRole = "owner" | "manager" | "worker" | "viewer";
 type Variables = { user: User };
+type RateBucket = { startedAt: number; count: number };
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL");
 const publishableKey = Deno.env.get("SUPABASE_ANON_KEY");
@@ -14,6 +15,9 @@ if (!supabaseUrl || !publishableKey || !serviceRoleKey) throw new Error("Supabas
 const admin = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false, autoRefreshToken: false } });
 const allowedOrigins = (Deno.env.get("WEB_ALLOWED_ORIGINS") ?? "http://localhost:3000,http://127.0.0.1:3000")
   .split(",").map((origin) => origin.trim().replace(/\/$/, "")).filter(Boolean);
+const rateBuckets = new Map<string, RateBucket>();
+const RATE_WINDOW_MS = 60_000;
+const MAX_REQUEST_BYTES = 65_536;
 
 const uuid = z.string().uuid();
 const createFarmSchema = z.object({ name: z.string().trim().min(2).max(120), location: z.string().trim().max(200).optional(), notes: z.string().trim().max(1000).optional() });
@@ -36,8 +40,27 @@ const dailyRecordSchema = z.object({
 
 const app = new Hono<{ Variables: Variables }>().basePath("/flockiq-api");
 
-function apiError(c: Context, status: 400 | 401 | 403 | 409 | 500, code: string, message: string) {
+function apiError(c: Context, status: 400 | 401 | 403 | 409 | 429 | 500, code: string, message: string) {
   return c.json({ error: { code, message } }, status);
+}
+
+function allowRequest(userId: string, method: string, path: string) {
+  const limit = method === "GET" ? 120 : 60;
+  const key = `${userId}:${method}:${path}`;
+  const now = Date.now();
+  if (rateBuckets.size > 10_000) {
+    for (const [bucketKey, bucket] of rateBuckets) {
+      if (now - bucket.startedAt >= RATE_WINDOW_MS) rateBuckets.delete(bucketKey);
+    }
+  }
+  const current = rateBuckets.get(key);
+  if (!current || now - current.startedAt >= RATE_WINDOW_MS) {
+    rateBuckets.set(key, { startedAt: now, count: 1 });
+    return true;
+  }
+  if (current.count >= limit) return false;
+  current.count += 1;
+  return true;
 }
 
 function bearer(header?: string) {
@@ -74,6 +97,8 @@ app.use("*", cors({
 app.get("/health", (c) => c.json({ ok: true, runtime: "supabase-edge" }));
 
 app.use("/api/*", async (c, next) => {
+  const contentLength = Number(c.req.header("content-length") ?? "0");
+  if (Number.isFinite(contentLength) && contentLength > MAX_REQUEST_BYTES) return apiError(c, 400, "request_too_large", "Request body exceeds the 64 KB limit");
   const token = bearer(c.req.header("authorization"));
   if (!token) return apiError(c, 401, "unauthorized", "Missing bearer token");
   const userClient = createClient(supabaseUrl, publishableKey, {
@@ -82,6 +107,10 @@ app.use("/api/*", async (c, next) => {
   });
   const { data, error } = await userClient.auth.getUser(token);
   if (error || !data.user) return apiError(c, 401, "unauthorized", "Invalid bearer token");
+  if (!allowRequest(data.user.id, c.req.method, c.req.path)) {
+    c.header("retry-after", "60");
+    return apiError(c, 429, "rate_limited", "Too many requests. Try again in one minute.");
+  }
   c.set("user", data.user);
   await next();
 });
