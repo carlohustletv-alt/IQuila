@@ -2,7 +2,7 @@ import type { Session } from "@supabase/supabase-js";
 import { lazy, Suspense, useDeferredValue, useEffect, useRef, useState, type FormEvent } from "react";
 import { createRoot } from "react-dom/client";
 import { predictFlockManagement } from "@flockiq/shared";
-import { apiRequest, type AdminOverview, type AdminUser, type AdminUserPage, type DailyReport, type DashboardData, type FarmListItem, type FarmMember, type FieldEvidence, type Flock, type ModulePermissions } from "./api";
+import { apiRequest, type AdminDatabaseHealth, type AdminOverview, type AdminUser, type AdminUserPage, type DailyReport, type DashboardData, type FarmListItem, type FarmMember, type FieldEvidence, type Flock, type ModulePermissions } from "./api";
 import { supabase } from "./supabase";
 import "./styles.css";
 
@@ -251,6 +251,7 @@ function Dashboard({ email, systemRole }: { email: string; systemRole: "user" | 
   const [evidence, setEvidence] = useState<FieldEvidence[]>([]);
   const [reports, setReports] = useState<DailyReport[]>([]);
   const [adminOverview, setAdminOverview] = useState<AdminOverview | null>(null);
+  const [databaseHealth, setDatabaseHealth] = useState<AdminDatabaseHealth | null>(null);
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
   const [adminUserPage, setAdminUserPage] = useState(0);
   const [adminUserTotal, setAdminUserTotal] = useState(0);
@@ -324,6 +325,9 @@ function Dashboard({ email, systemRole }: { email: string; systemRole: "user" | 
       loadOverview();
       apiRequest<AdminUserPage>(`/api/admin/users?page=${adminUserPage}&search=${encodeURIComponent(deferredAdminUserSearch)}`, { signal: controller.signal })
         .then((data) => { setAdminUsers(data.users); setAdminUserTotal(data.total); })
+        .catch((error: Error) => { if (error.name !== "AbortError") setStatus(error.message); });
+      apiRequest<AdminDatabaseHealth>("/api/admin/database-health", { signal: controller.signal })
+        .then(setDatabaseHealth)
         .catch((error: Error) => { if (error.name !== "AbortError") setStatus(error.message); });
       const interval = window.setInterval(loadOverview, 60_000);
       return () => { controller.abort(); window.clearInterval(interval); };
@@ -646,15 +650,20 @@ function Dashboard({ email, systemRole }: { email: string; systemRole: "user" | 
         {activeView === "reports" ? <article className="panel evidencePanel"><div className="panelHeaderRow"><div><div className="panelKicker">{canManageFarm ? "Farm reporting" : "Private reporting history"}</div><h2>{canManageFarm ? "Daily reports" : "Reports submitted by you"}</h2></div><span className="countPill">{reports.length}</span></div><div className="reportTable">{reports.map((report) => <div className="reportRow" key={report.id}><strong>{report.record_date}</strong><span>Mortality {report.mortality_count}</span><span>Feed {report.feed_consumed_kg ?? 0} kg</span><span>Eggs {report.eggs_collected ?? 0}</span><small>{report.notes || "No notes"}</small></div>)}{!reports.length ? <p className="empty">No reports are available yet.</p> : null}</div></article> : null}
       </section> : null}
 
-        {activeView === "admin" && systemRole === "superadmin" ? <SuperadminConsole overview={adminOverview} users={adminUsers} userPage={adminUserPage} userTotal={adminUserTotal} userSearch={adminUserSearch} onUserSearch={(value) => { setAdminUserSearch(value); setAdminUserPage(0); }} onUserPage={setAdminUserPage} onToggleRole={toggleSuperadmin} onUpdateMembership={updateMembershipStatus} /> : null}
+        {activeView === "admin" && systemRole === "superadmin" ? <SuperadminConsole overview={adminOverview} databaseHealth={databaseHealth} users={adminUsers} userPage={adminUserPage} userTotal={adminUserTotal} userSearch={adminUserSearch} onUserSearch={(value) => { setAdminUserSearch(value); setAdminUserPage(0); }} onUserPage={setAdminUserPage} onToggleRole={toggleSuperadmin} onUpdateMembership={updateMembershipStatus} /> : null}
       </section>
     </main>
   );
 }
 
-function SuperadminConsole({ overview, users, userPage, userTotal, userSearch, onUserSearch, onUserPage, onToggleRole, onUpdateMembership }: { overview: AdminOverview | null; users: AdminUser[]; userPage: number; userTotal: number; userSearch: string; onUserSearch: (value: string) => void; onUserPage: (page: number) => void; onToggleRole: (userId: string, role: "user" | "superadmin") => void; onUpdateMembership: (userId: string, status: "active" | "pending" | "suspended") => void }) {
+function SuperadminConsole({ overview, databaseHealth, users, userPage, userTotal, userSearch, onUserSearch, onUserPage, onToggleRole, onUpdateMembership }: { overview: AdminOverview | null; databaseHealth: AdminDatabaseHealth | null; users: AdminUser[]; userPage: number; userTotal: number; userSearch: string; onUserSearch: (value: string) => void; onUserPage: (page: number) => void; onToggleRole: (userId: string, role: "user" | "superadmin") => void; onUpdateMembership: (userId: string, status: "active" | "pending" | "suspended") => void }) {
   if (!overview) return <p className="empty">Loading system overview...</p>;
-  return <section className="adminConsole"><div className="adminMetrics">{Object.entries(overview.summary).map(([key, value]) => <article key={key}><span>{key.replaceAll("_", " ")}</span><strong>{formatNumber(value)}</strong></article>)}</div><section className="adminInsights" aria-label="User analytics"><ActivityChart title="New users" description="Registrations during the last 30 days" values={overview.analytics.registrations} /><ActivityChart title="Verified field activity" description="GPS-tagged evidence received during the last 14 days" values={overview.analytics.field_activity} /><DistributionChart title="Account makeup" values={overview.analytics.account_types.map((item) => ({ label: item.account_type, count: item.count }))} /><DistributionChart title="Membership access" values={overview.analytics.membership_statuses.map((item) => ({ label: item.status, count: item.count }))} /></section><Suspense fallback={<article className="panel locationPanel"><p className="empty">Loading activity map...</p></article>}><UserLocationMap locations={overview.locations} activeUsers={overview.analytics.active_location_users} /></Suspense><ActivityFeed activity={overview.activity} /><AccountDirectory users={users} page={userPage} total={userTotal} search={userSearch} onSearch={onUserSearch} onPage={onUserPage} onToggleRole={onToggleRole} onUpdateMembership={onUpdateMembership} /><article className="panel adminTable"><div className="panelKicker">Entitlement audit</div><h2>Recent membership decisions</h2>{overview.membership_audits.map((audit) => <div className="adminUser" key={audit.id}><div><strong>{audit.action.replaceAll("_", " ")}</strong><small>{new Date(audit.created_at).toLocaleString()} · {audit.metadata.reason || "No reason recorded"}</small></div><span className="roleTag active">{audit.metadata.new_status || "recorded"}</span></div>)}{!overview.membership_audits.length ? <p className="empty">No membership decisions have been recorded.</p> : null}</article></section>;
+  return <section className="adminConsole"><div className="adminMetrics">{Object.entries(overview.summary).map(([key, value]) => <article key={key}><span>{key.replaceAll("_", " ")}</span><strong>{formatNumber(value)}</strong></article>)}</div>{databaseHealth ? <DatabaseHealthPanel health={databaseHealth} /> : <article className="panel healthPanel"><p className="empty">Loading database health...</p></article>}<section className="adminInsights" aria-label="User analytics"><ActivityChart title="New users" description="Registrations during the last 30 days" values={overview.analytics.registrations} /><ActivityChart title="Verified field activity" description="GPS-tagged evidence received during the last 14 days" values={overview.analytics.field_activity} /><DistributionChart title="Account makeup" values={overview.analytics.account_types.map((item) => ({ label: item.account_type, count: item.count }))} /><DistributionChart title="Membership access" values={overview.analytics.membership_statuses.map((item) => ({ label: item.status, count: item.count }))} /></section><Suspense fallback={<article className="panel locationPanel"><p className="empty">Loading activity map...</p></article>}><UserLocationMap locations={overview.locations} activeUsers={overview.analytics.active_location_users} /></Suspense><ActivityFeed activity={overview.activity} /><AccountDirectory users={users} page={userPage} total={userTotal} search={userSearch} onSearch={onUserSearch} onPage={onUserPage} onToggleRole={onToggleRole} onUpdateMembership={onUpdateMembership} /><article className="panel adminTable"><div className="panelKicker">Entitlement audit</div><h2>Recent membership decisions</h2>{overview.membership_audits.map((audit) => <div className="adminUser" key={audit.id}><div><strong>{audit.action.replaceAll("_", " ")}</strong><small>{new Date(audit.created_at).toLocaleString()} · {audit.metadata.reason || "No reason recorded"}</small></div><span className="roleTag active">{audit.metadata.new_status || "recorded"}</span></div>)}{!overview.membership_audits.length ? <p className="empty">No membership decisions have been recorded.</p> : null}</article></section>;
+}
+
+function DatabaseHealthPanel({ health }: { health: AdminDatabaseHealth }) {
+  const cacheHit = `${(health.cache_hit_ratio * 100).toFixed(1)}%`;
+  return <article className="panel healthPanel"><div className="panelHeaderRow"><div><div className="panelKicker">Supabase / PostgreSQL</div><h2>Database health</h2></div><span className="countPill">Live stats</span></div><div className="healthMetrics"><div><span>Database size</span><strong>{formatBytes(health.database_size_bytes)}</strong></div><div><span>Connections</span><strong>{health.active_connections} active / {health.total_connections}</strong><small>{health.max_connections} maximum</small></div><div><span>Cache hit rate</span><strong>{cacheHit}</strong></div><div><span>Tracked tables</span><strong>{health.tables.length}</strong></div></div><div className="healthTable">{health.tables.map((table) => <div key={table.table}><div><strong>{table.table.replaceAll("_", " ")}</strong><span>{formatNumber(table.estimated_rows)} estimated rows · {formatBytes(table.total_size_bytes)}</span></div><span className={`roleTag ${table.status}`}>{table.status.replaceAll("_", " ")}</span><small>{table.dead_rows ? `${formatNumber(table.dead_rows)} dead rows (${(table.dead_row_ratio * 100).toFixed(1)}%)` : "No dead-row pressure"} · {formatNumber(table.index_scans)} index scans</small></div>)}</div></article>;
 }
 
 function AccountDirectory({ users, page, total, search, onSearch, onPage, onToggleRole, onUpdateMembership }: { users: AdminUser[]; page: number; total: number; search: string; onSearch: (value: string) => void; onPage: (page: number) => void; onToggleRole: (userId: string, role: "user" | "superadmin") => void; onUpdateMembership: (userId: string, status: "active" | "pending" | "suspended") => void }) {
@@ -683,6 +692,13 @@ function DistributionChart({ title, values }: { title: string; values: { label: 
 
 function formatNumber(value: number) {
   return new Intl.NumberFormat().format(value);
+}
+
+function formatBytes(value: number) {
+  if (value < 1024) return `${value} B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  const index = Math.min(Math.floor(Math.log(value) / Math.log(1024)) - 1, units.length - 1);
+  return `${(value / 1024 ** (index + 1)).toFixed(value >= 1024 ** (index + 2) ? 1 : 0)} ${units[index]}`;
 }
 
 function formatShortDate(value: string) {

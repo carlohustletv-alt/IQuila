@@ -563,6 +563,18 @@ label {
 .directoryPager { align-items: center; display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
 .directoryPager span { color: #718074; font-size: 12px; margin-right: auto; }
 .directoryPager button { font-size: 12px; padding: 9px 12px; }
+.healthPanel { padding: 24px; }
+.healthMetrics { display: grid; gap: 12px; grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 18px 0; }
+.healthMetrics > div { background: #f4f8f2; border-radius: 14px; padding: 14px; }
+.healthMetrics span, .healthMetrics strong, .healthMetrics small { display: block; }
+.healthMetrics span, .healthMetrics small { color: #718074; font-size: 11px; }
+.healthMetrics strong { font-size: 20px; margin: 5px 0; overflow-wrap: anywhere; }
+.healthTable { display: grid; }
+.healthTable > div { align-items: center; border-top: 1px solid #e1e7df; display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr) auto minmax(150px, .65fr); padding: 11px 0; }
+.healthTable strong, .healthTable span, .healthTable small { display: block; }
+.healthTable span, .healthTable small { color: #718074; font-size: 11px; margin-top: 3px; }
+.roleTag.maintenance_due { background: #fde8d6; color: #9b4310; }
+.roleTag.observe { background: #fff3d8; color: #85620f; }
 
 .analyticsBlock {
   display: grid;
@@ -1048,6 +1060,9 @@ label {
   .reportRow small { grid-column: 1 / -1; }
   .activityItem { align-items: start; grid-template-columns: 1fr auto; }
   .activityItem time { grid-column: 1 / -1; }
+  .healthMetrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .healthTable > div { grid-template-columns: minmax(0, 1fr) auto; }
+  .healthTable > div > small { grid-column: 1 / -1; }
 }
 
 @media (max-width: 560px) {

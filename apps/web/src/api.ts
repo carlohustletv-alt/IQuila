@@ -133,6 +133,15 @@ export interface AdminUserPage {
   total: number;
 }
 
+export interface AdminDatabaseHealth {
+  database_size_bytes: number;
+  active_connections: number;
+  total_connections: number;
+  max_connections: number;
+  cache_hit_ratio: number;
+  tables: { table: string; estimated_rows: number; dead_rows: number; dead_row_ratio: number; total_size_bytes: number; index_size_bytes: number; last_autovacuum: string | null; last_autoanalyze: string | null; sequential_scans: number; index_scans: number; status: "healthy" | "observe" | "maintenance_due" }[];
+}
+
 export interface Flock {
   id: string;
   name: string;

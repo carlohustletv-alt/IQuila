@@ -180,6 +180,14 @@ app.get("/api/admin/users", async (c) => {
   return c.json({ users: data ?? [], page: query.page, page_size: pageSize, total: count ?? 0 });
 });
 
+app.get("/api/admin/database-health", async (c) => {
+  const user = c.get("user");
+  if (!(await superadmin(user.id))) return apiError(c, 403, "superadmin_required", "Superadmin access required");
+  const { data, error } = await admin.rpc("get_system_database_health");
+  if (error) return apiError(c, 500, "database_health_failed", "Could not load database health");
+  return c.json(data);
+});
+
 app.patch("/api/admin/users/:userId/membership-status", async (c) => {
   const actor = c.get("user");
   if (!(await superadmin(actor.id))) return apiError(c, 403, "superadmin_required", "Superadmin access required");
