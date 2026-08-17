@@ -558,6 +558,11 @@ label {
 .activityItem strong, .activityItem span, .activityItem small { display: block; }
 .activityItem span, .activityItem small { color: #718074; font-size: 12px; margin-top: 3px; }
 .activityItem > .roleTag { color: #1e4d2b; margin: 0; text-transform: capitalize; }
+.accountDirectory { padding: 24px; }
+.accountSearch { margin: 16px 0 4px; max-width: 420px; }
+.directoryPager { align-items: center; display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+.directoryPager span { color: #718074; font-size: 12px; margin-right: auto; }
+.directoryPager button { font-size: 12px; padding: 9px 12px; }
 
 .analyticsBlock {
   display: grid;

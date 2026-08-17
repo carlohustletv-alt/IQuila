@@ -92,21 +92,6 @@ function can(role: FarmRole | null, action: "read" | "manage" | "reports") {
   return role === "owner" || role === "manager";
 }
 
-function dailySeries(values: (string | null)[], days: number) {
-  const buckets = new Map<string, number>();
-  for (let offset = days - 1; offset >= 0; offset -= 1) {
-    const date = new Date();
-    date.setUTCHours(0, 0, 0, 0);
-    date.setUTCDate(date.getUTCDate() - offset);
-    buckets.set(date.toISOString().slice(0, 10), 0);
-  }
-  for (const value of values) {
-    const date = value?.slice(0, 10);
-    if (date && buckets.has(date)) buckets.set(date, (buckets.get(date) ?? 0) + 1);
-  }
-  return [...buckets].map(([date, count]) => ({ date, count }));
-}
-
 app.use("*", cors({
   origin: (origin) => allowedOrigins.includes(origin.replace(/\/$/, "")) ? origin : undefined,
   allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
@@ -144,63 +129,55 @@ app.get("/api/auth/me", async (c) => {
 app.get("/api/admin/overview", async (c) => {
   const user = c.get("user");
   if (!(await superadmin(user.id))) return apiError(c, 403, "superadmin_required", "Superadmin access required");
-  const [profiles, farms, members, flocks, records, evidence, locationEvidence, authUsers, entitlementAudits, systemActivity] = await Promise.all([
-    admin.from("profiles").select("id, full_name, account_type, membership_status, system_role, created_at").order("created_at", { ascending: false }),
-    admin.from("farms").select("id, name, location, created_by, created_at").is("deleted_at", null).order("created_at", { ascending: false }),
-    admin.from("farm_members").select("id, farm_id, user_id, role, permissions, accepted_at").is("deleted_at", null),
-    admin.from("flocks").select("id", { count: "exact", head: true }).is("deleted_at", null),
-    admin.from("daily_records").select("id", { count: "exact", head: true }).is("deleted_at", null),
-    admin.from("field_evidence").select("id", { count: "exact", head: true }).is("deleted_at", null),
-    admin.from("field_evidence").select("captured_by, farm_id, latitude, longitude, accuracy_meters, device_captured_at, server_received_at")
-      .is("deleted_at", null).not("latitude", "is", null).not("longitude", "is", null).order("server_received_at", { ascending: false }).limit(1000),
-    admin.auth.admin.listUsers({ page: 1, perPage: 1000 }),
+  const [analytics, locations, entitlementAudits, systemActivity] = await Promise.all([
+    admin.rpc("get_system_admin_analytics"),
+    admin.rpc("get_recent_user_locations", { max_rows: 250 }),
     admin.from("audit_logs").select("id, actor_id, action, entity_table, entity_id, metadata, created_at").is("farm_id", null).in("action", ["manager_membership_approved", "manager_membership_suspended"]).order("created_at", { ascending: false }).limit(30),
     admin.from("audit_logs").select("id, farm_id, actor_id, action, entity_table, entity_id, metadata, created_at").order("created_at", { ascending: false }).limit(100)
   ]);
-  const failure = [profiles, farms, members, flocks, records, evidence, locationEvidence, authUsers, entitlementAudits, systemActivity].find((result) => result.error)?.error;
+  const failure = [analytics, locations, entitlementAudits, systemActivity].find((result) => result.error)?.error;
   if (failure) return apiError(c, 500, "admin_overview_failed", "Could not load system overview");
-  const emailById = new Map(authUsers.data.users.map((account) => [account.id, account.email]));
-  const profileById = new Map(profiles.data.map((profile) => [profile.id, profile]));
-  const farmById = new Map(farms.data.map((farm) => [farm.id, farm]));
-  const latestLocationByUser = new Map<string, typeof locationEvidence.data[number]>();
-  for (const item of locationEvidence.data ?? []) {
-    if (!latestLocationByUser.has(item.captured_by)) latestLocationByUser.set(item.captured_by, item);
-  }
-  const locations = [...latestLocationByUser.values()].flatMap((item) => {
-    const profile = profileById.get(item.captured_by);
-    const farm = farmById.get(item.farm_id);
-    return profile && farm ? [{
-      user_id: item.captured_by,
-      full_name: profile.full_name,
-      email: emailById.get(item.captured_by) ?? null,
-      farm_name: farm.name,
-      latitude: item.latitude,
-      longitude: item.longitude,
-      accuracy_meters: item.accuracy_meters,
-      captured_at: item.device_captured_at,
-      received_at: item.server_received_at
-    }] : [];
-  });
+  const actorIds = [...new Set((systemActivity.data ?? []).flatMap((entry) => entry.actor_id ? [entry.actor_id] : []))];
+  const farmIds = [...new Set((systemActivity.data ?? []).flatMap((entry) => entry.farm_id ? [entry.farm_id] : []))];
+  const [actors, farms] = await Promise.all([
+    actorIds.length ? admin.from("profiles").select("id, full_name, email").in("id", actorIds) : { data: [], error: null },
+    farmIds.length ? admin.from("farms").select("id, name").in("id", farmIds) : { data: [], error: null }
+  ]);
+  if (actors.error || farms.error) return apiError(c, 500, "admin_activity_details_failed", "Could not load activity details");
+  const actorById = new Map((actors.data ?? []).map((profile) => [profile.id, profile]));
+  const farmById = new Map((farms.data ?? []).map((farm) => [farm.id, farm]));
+  const analyticsData = analytics.data as { summary: Record<string, number>; registrations: unknown[]; field_activity: unknown[]; membership_statuses: unknown[]; account_types: unknown[] };
   return c.json({
-    summary: { users: profiles.data.length, farms: farms.data.length, memberships: members.data.length, flocks: flocks.count ?? 0, daily_records: records.count ?? 0, evidence: evidence.count ?? 0, pending_manager_memberships: profiles.data.filter((profile) => profile.account_type === "manager" && profile.membership_status === "pending").length },
-    users: profiles.data.map((profile) => ({ ...profile, email: emailById.get(profile.id) ?? null })), farms: farms.data, memberships: members.data, membership_audits: entitlementAudits.data ?? [],
+    summary: analyticsData.summary,
+    membership_audits: entitlementAudits.data ?? [],
     analytics: {
-      registrations: dailySeries(profiles.data.map((profile) => profile.created_at), 30),
-      field_activity: dailySeries((locationEvidence.data ?? []).map((item) => item.server_received_at), 14),
-      membership_statuses: ["active", "pending", "suspended"].map((status) => ({ status, count: profiles.data.filter((profile) => profile.membership_status === status).length })),
-      account_types: ["manager", "personnel"].map((account_type) => ({ account_type, count: profiles.data.filter((profile) => profile.account_type === account_type).length })),
-      active_location_users: locations.length
+      registrations: analyticsData.registrations, field_activity: analyticsData.field_activity,
+      membership_statuses: analyticsData.membership_statuses, account_types: analyticsData.account_types,
+      active_location_users: locations.data?.length ?? 0
     },
-    locations,
+    locations: locations.data ?? [],
     activity: (systemActivity.data ?? []).map((entry) => {
-      const actor = entry.actor_id ? profileById.get(entry.actor_id) : null;
+      const actor = entry.actor_id ? actorById.get(entry.actor_id) : null;
       return {
         ...entry,
-        actor: actor ? { id: entry.actor_id, full_name: actor.full_name, email: emailById.get(entry.actor_id) ?? null } : null,
+        actor: actor ? { id: entry.actor_id, full_name: actor.full_name, email: actor.email } : null,
         farm_name: entry.farm_id ? farmById.get(entry.farm_id)?.name ?? "Deleted farm" : "System"
       };
     })
   });
+});
+
+app.get("/api/admin/users", async (c) => {
+  const user = c.get("user");
+  if (!(await superadmin(user.id))) return apiError(c, 403, "superadmin_required", "Superadmin access required");
+  const query = z.object({ page: z.coerce.number().int().min(0).max(10_000).default(0), search: z.string().trim().max(100).default("") }).parse(c.req.query());
+  const pageSize = 50;
+  const search = query.search.replace(/[%_,()]/g, "");
+  let request = admin.from("profiles").select("id, full_name, email, account_type, membership_status, system_role, created_at", { count: "estimated" }).order("created_at", { ascending: false });
+  if (search) request = request.or(`full_name.ilike.%${search}%,email.ilike.%${search}%`);
+  const { data, error, count } = await request.range(query.page * pageSize, query.page * pageSize + pageSize - 1);
+  if (error) return apiError(c, 500, "admin_users_failed", "Could not load accounts");
+  return c.json({ users: data ?? [], page: query.page, page_size: pageSize, total: count ?? 0 });
 });
 
 app.patch("/api/admin/users/:userId/membership-status", async (c) => {

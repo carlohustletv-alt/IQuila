@@ -1,8 +1,8 @@
 import type { Session } from "@supabase/supabase-js";
-import { lazy, Suspense, useEffect, useRef, useState, type FormEvent } from "react";
+import { lazy, Suspense, useDeferredValue, useEffect, useRef, useState, type FormEvent } from "react";
 import { createRoot } from "react-dom/client";
 import { predictFlockManagement } from "@flockiq/shared";
-import { apiRequest, type AdminOverview, type DailyReport, type DashboardData, type FarmListItem, type FarmMember, type FieldEvidence, type Flock, type ModulePermissions } from "./api";
+import { apiRequest, type AdminOverview, type AdminUser, type AdminUserPage, type DailyReport, type DashboardData, type FarmListItem, type FarmMember, type FieldEvidence, type Flock, type ModulePermissions } from "./api";
 import { supabase } from "./supabase";
 import "./styles.css";
 
@@ -251,9 +251,14 @@ function Dashboard({ email, systemRole }: { email: string; systemRole: "user" | 
   const [evidence, setEvidence] = useState<FieldEvidence[]>([]);
   const [reports, setReports] = useState<DailyReport[]>([]);
   const [adminOverview, setAdminOverview] = useState<AdminOverview | null>(null);
+  const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
+  const [adminUserPage, setAdminUserPage] = useState(0);
+  const [adminUserTotal, setAdminUserTotal] = useState(0);
+  const [adminUserSearch, setAdminUserSearch] = useState("");
   const [dataNotice, setDataNotice] = useState<DataNotice | null>(null);
   const [notificationPermission, setNotificationPermission] = useState(() => typeof Notification === "undefined" ? "unsupported" : Notification.permission);
   const activitySignatureRef = useRef("");
+  const deferredAdminUserSearch = useDeferredValue(adminUserSearch);
 
   async function loadFarms() {
     const data = await apiRequest<{ farms: FarmListItem[] }>("/api/farms");
@@ -317,11 +322,14 @@ function Dashboard({ email, systemRole }: { email: string; systemRole: "user" | 
         .then(setAdminOverview)
         .catch((error: Error) => { if (error.name !== "AbortError") setStatus(error.message); });
       loadOverview();
+      apiRequest<AdminUserPage>(`/api/admin/users?page=${adminUserPage}&search=${encodeURIComponent(deferredAdminUserSearch)}`, { signal: controller.signal })
+        .then((data) => { setAdminUsers(data.users); setAdminUserTotal(data.total); })
+        .catch((error: Error) => { if (error.name !== "AbortError") setStatus(error.message); });
       const interval = window.setInterval(loadOverview, 60_000);
       return () => { controller.abort(); window.clearInterval(interval); };
     }
     return () => controller.abort();
-  }, [activeView, selectedFarmId, systemRole]);
+  }, [activeView, selectedFarmId, systemRole, adminUserPage, deferredAdminUserSearch]);
 
   async function createFarm(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -415,7 +423,7 @@ function Dashboard({ email, systemRole }: { email: string; systemRole: "user" | 
         method: "PATCH",
         body: JSON.stringify({ system_role: currentRole === "superadmin" ? "user" : "superadmin" })
       });
-      setAdminOverview((current) => current ? { ...current, users: current.users.map((item) => item.id === userId ? { ...item, system_role: currentRole === "superadmin" ? "user" : "superadmin" } : item) } : current);
+      setAdminUsers((current) => current.map((item) => item.id === userId ? { ...item, system_role: currentRole === "superadmin" ? "user" : "superadmin" } : item));
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Could not update system role.");
     }
@@ -430,10 +438,7 @@ function Dashboard({ email, systemRole }: { email: string; systemRole: "user" | 
         method: "PATCH",
         body: JSON.stringify({ membership_status: membershipStatus, reason })
       });
-      setAdminOverview((current) => current ? {
-        ...current,
-        users: current.users.map((user) => user.id === userId ? { ...user, membership_status: data.profile.membership_status } : user)
-      } : current);
+      setAdminUsers((current) => current.map((user) => user.id === userId ? { ...user, membership_status: data.profile.membership_status } : user));
       setStatus(`Manager membership ${membershipStatus}.`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Could not update membership.");
@@ -641,15 +646,21 @@ function Dashboard({ email, systemRole }: { email: string; systemRole: "user" | 
         {activeView === "reports" ? <article className="panel evidencePanel"><div className="panelHeaderRow"><div><div className="panelKicker">{canManageFarm ? "Farm reporting" : "Private reporting history"}</div><h2>{canManageFarm ? "Daily reports" : "Reports submitted by you"}</h2></div><span className="countPill">{reports.length}</span></div><div className="reportTable">{reports.map((report) => <div className="reportRow" key={report.id}><strong>{report.record_date}</strong><span>Mortality {report.mortality_count}</span><span>Feed {report.feed_consumed_kg ?? 0} kg</span><span>Eggs {report.eggs_collected ?? 0}</span><small>{report.notes || "No notes"}</small></div>)}{!reports.length ? <p className="empty">No reports are available yet.</p> : null}</div></article> : null}
       </section> : null}
 
-       {activeView === "admin" && systemRole === "superadmin" ? <SuperadminConsole overview={adminOverview} onToggleRole={toggleSuperadmin} onUpdateMembership={updateMembershipStatus} /> : null}
+        {activeView === "admin" && systemRole === "superadmin" ? <SuperadminConsole overview={adminOverview} users={adminUsers} userPage={adminUserPage} userTotal={adminUserTotal} userSearch={adminUserSearch} onUserSearch={(value) => { setAdminUserSearch(value); setAdminUserPage(0); }} onUserPage={setAdminUserPage} onToggleRole={toggleSuperadmin} onUpdateMembership={updateMembershipStatus} /> : null}
       </section>
     </main>
   );
 }
 
-function SuperadminConsole({ overview, onToggleRole, onUpdateMembership }: { overview: AdminOverview | null; onToggleRole: (userId: string, role: "user" | "superadmin") => void; onUpdateMembership: (userId: string, status: "active" | "pending" | "suspended") => void }) {
+function SuperadminConsole({ overview, users, userPage, userTotal, userSearch, onUserSearch, onUserPage, onToggleRole, onUpdateMembership }: { overview: AdminOverview | null; users: AdminUser[]; userPage: number; userTotal: number; userSearch: string; onUserSearch: (value: string) => void; onUserPage: (page: number) => void; onToggleRole: (userId: string, role: "user" | "superadmin") => void; onUpdateMembership: (userId: string, status: "active" | "pending" | "suspended") => void }) {
   if (!overview) return <p className="empty">Loading system overview...</p>;
-  return <section className="adminConsole"><div className="adminMetrics">{Object.entries(overview.summary).map(([key, value]) => <article key={key}><span>{key.replaceAll("_", " ")}</span><strong>{formatNumber(value)}</strong></article>)}</div><section className="adminInsights" aria-label="User analytics"><ActivityChart title="New users" description="Registrations during the last 30 days" values={overview.analytics.registrations} /><ActivityChart title="Verified field activity" description="GPS-tagged evidence received during the last 14 days" values={overview.analytics.field_activity} /><DistributionChart title="Account makeup" values={overview.analytics.account_types.map((item) => ({ label: item.account_type, count: item.count }))} /><DistributionChart title="Membership access" values={overview.analytics.membership_statuses.map((item) => ({ label: item.status, count: item.count }))} /></section><Suspense fallback={<article className="panel locationPanel"><p className="empty">Loading activity map...</p></article>}><UserLocationMap locations={overview.locations} activeUsers={overview.analytics.active_location_users} /></Suspense><ActivityFeed activity={overview.activity} /><article className="panel adminTable"><div className="panelKicker">Accounts and membership</div><h2>Manager access</h2>{overview.users.map((user) => <div className="adminUser" key={user.id}><div><strong>{user.full_name || user.email}</strong><small>{user.email} · {user.account_type}</small></div><span className={`roleTag ${user.membership_status}`}>{user.membership_status}</span><span className={`roleTag ${user.system_role}`}>{user.system_role}</span>{user.account_type === "manager" ? <button onClick={() => onUpdateMembership(user.id, user.membership_status)}>{user.membership_status === "active" ? "Suspend membership" : "Approve membership"}</button> : null}<button onClick={() => onToggleRole(user.id, user.system_role)}>{user.system_role === "superadmin" ? "Remove admin" : "Make superadmin"}</button></div>)}</article><article className="panel adminTable"><div className="panelKicker">Entitlement audit</div><h2>Recent membership decisions</h2>{overview.membership_audits.map((audit) => <div className="adminUser" key={audit.id}><div><strong>{audit.action.replaceAll("_", " ")}</strong><small>{new Date(audit.created_at).toLocaleString()} · {audit.metadata.reason || "No reason recorded"}</small></div><span className="roleTag active">{audit.metadata.new_status || "recorded"}</span></div>)}{!overview.membership_audits.length ? <p className="empty">No membership decisions have been recorded.</p> : null}</article></section>;
+  return <section className="adminConsole"><div className="adminMetrics">{Object.entries(overview.summary).map(([key, value]) => <article key={key}><span>{key.replaceAll("_", " ")}</span><strong>{formatNumber(value)}</strong></article>)}</div><section className="adminInsights" aria-label="User analytics"><ActivityChart title="New users" description="Registrations during the last 30 days" values={overview.analytics.registrations} /><ActivityChart title="Verified field activity" description="GPS-tagged evidence received during the last 14 days" values={overview.analytics.field_activity} /><DistributionChart title="Account makeup" values={overview.analytics.account_types.map((item) => ({ label: item.account_type, count: item.count }))} /><DistributionChart title="Membership access" values={overview.analytics.membership_statuses.map((item) => ({ label: item.status, count: item.count }))} /></section><Suspense fallback={<article className="panel locationPanel"><p className="empty">Loading activity map...</p></article>}><UserLocationMap locations={overview.locations} activeUsers={overview.analytics.active_location_users} /></Suspense><ActivityFeed activity={overview.activity} /><AccountDirectory users={users} page={userPage} total={userTotal} search={userSearch} onSearch={onUserSearch} onPage={onUserPage} onToggleRole={onToggleRole} onUpdateMembership={onUpdateMembership} /><article className="panel adminTable"><div className="panelKicker">Entitlement audit</div><h2>Recent membership decisions</h2>{overview.membership_audits.map((audit) => <div className="adminUser" key={audit.id}><div><strong>{audit.action.replaceAll("_", " ")}</strong><small>{new Date(audit.created_at).toLocaleString()} · {audit.metadata.reason || "No reason recorded"}</small></div><span className="roleTag active">{audit.metadata.new_status || "recorded"}</span></div>)}{!overview.membership_audits.length ? <p className="empty">No membership decisions have been recorded.</p> : null}</article></section>;
+}
+
+function AccountDirectory({ users, page, total, search, onSearch, onPage, onToggleRole, onUpdateMembership }: { users: AdminUser[]; page: number; total: number; search: string; onSearch: (value: string) => void; onPage: (page: number) => void; onToggleRole: (userId: string, role: "user" | "superadmin") => void; onUpdateMembership: (userId: string, status: "active" | "pending" | "suspended") => void }) {
+  const pageSize = 50;
+  const hasNextPage = (page + 1) * pageSize < total;
+  return <article className="panel adminTable accountDirectory"><div className="panelHeaderRow"><div><div className="panelKicker">Accounts and membership</div><h2>Account directory</h2></div><span className="countPill">{formatNumber(total)} accounts</span></div><input aria-label="Search accounts" className="accountSearch" placeholder="Search name or email" value={search} onChange={(event) => onSearch(event.target.value)} />{users.map((user) => <div className="adminUser" key={user.id}><div><strong>{user.full_name || user.email}</strong><small>{user.email} · {user.account_type}</small></div><span className={`roleTag ${user.membership_status}`}>{user.membership_status}</span><span className={`roleTag ${user.system_role}`}>{user.system_role}</span>{user.account_type === "manager" ? <button onClick={() => onUpdateMembership(user.id, user.membership_status)}>{user.membership_status === "active" ? "Suspend membership" : "Approve membership"}</button> : null}<button onClick={() => onToggleRole(user.id, user.system_role)}>{user.system_role === "superadmin" ? "Remove admin" : "Make superadmin"}</button></div>)}{!users.length ? <p className="empty">No accounts match this search.</p> : null}<div className="directoryPager"><span>Page {page + 1}</span><button disabled={page === 0} onClick={() => onPage(page - 1)}>Previous</button><button disabled={!hasNextPage} onClick={() => onPage(page + 1)}>Next</button></div></article>;
 }
 
 function ActivityFeed({ activity }: { activity: AdminOverview["activity"] }) {
