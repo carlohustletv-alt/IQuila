@@ -1,0 +1,30 @@
+{
+  "name": "@flockiq/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "main": "index.js",
+  "scripts": {
+    "start": "react-native start",
+    "android": "react-native run-android",
+    "check:runtime": "node ../../scripts/check-mobile-runtime.mjs",
+    "typecheck": "npm run check:runtime && tsc --noEmit",
+    "build:android": "npm run check:runtime && cd android && gradlew.bat assembleDebug"
+  },
+  "dependencies": {
+    "@flockiq/shared": "*",
+    "@flockiq/sync": "*",
+    "@react-native-async-storage/async-storage": "^2.1.2",
+    "@supabase/supabase-js": "^2.56.0",
+    "base64-arraybuffer": "^1.0.2",
+    "react": "19.0.0",
+    "react-native": "^0.79.5",
+    "react-native-url-polyfill": "^2.0.0"
+  },
+  "devDependencies": {
+    "@react-native-community/cli": "^20.2.0",
+    "@react-native-community/cli-platform-android": "^20.2.0",
+    "@react-native/metro-config": "^0.79.7",
+    "@types/react": "^19.0.14",
+    "typescript": "^5.9.2"
+  }
+}

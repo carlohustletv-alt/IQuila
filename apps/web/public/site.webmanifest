@@ -1,0 +1,12 @@
+{
+  "name": "IQuila",
+  "short_name": "IQuila",
+  "description": "Poultry operations, field evidence, and farm intelligence.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f1f4ef",
+  "theme_color": "#11766b",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

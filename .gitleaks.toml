@@ -1,0 +1,8 @@
+title = "IQuila Gitleaks configuration"
+
+[allowlist]
+description = "The Android Supabase publishable key is a required public client identifier, not a privileged secret."
+regexTarget = "match"
+regexes = [
+  '''sb_publishable_nBcqliutICaOz_VIk5KSwA_5yNwQWb1'''
+]

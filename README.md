@@ -4,73 +4,68 @@
 
 # IQuila
 
-IQuila is a modern software project workspace prepared for development, data analytics, and future application delivery.
+IQuila is an offline-first poultry management system with a web app for owners and managers, an Android app for daily farm work, and Supabase for database, authentication, storage, and Edge API services.
 
-## Overview
+## About
 
-This repository is the home for the IQuila project. It is currently set up as a clean starting point where application code, analytics notebooks, documentation, and supporting tools can be added as the project grows.
+IQuila helps poultry operations keep farm, flock, personnel, evidence, and daily production records in one system. It is designed for field teams that need to continue recording work when connectivity is limited, then synchronize verified records when they are back online.
 
-## Goals
+The project includes a manager web console, an Android field application, a Supabase-backed data layer, and auditable role-based access controls. IQuila is independently maintained and distributed as free software under GPL-3.0-only.
 
-- Build a clean, maintainable project foundation.
-- Support programming, data analytics, and web development workflows.
-- Keep documentation clear for future contributors and users.
-- Protect original project work with clear ownership and access controls.
+## Project Information
 
-## Planned Structure
+- **Status:** Active development
+- **Primary platform:** Web console and Android field application
+- **Backend:** Supabase PostgreSQL, Storage, Auth, and Edge Functions
+- **License:** GNU General Public License v3.0 only
+- **Security policy:** See [`SECURITY.md`](SECURITY.md)
+- **Contributions:** Contributions must be compatible with `GPL-3.0-only` and include appropriate tests or verification notes.
 
-```text
-IQuila/
-├── README.md
-├── docs/
-├── src/
-├── data/
-├── notebooks/
-├── tests/
-└── scripts/
-```
+## Features
 
-## Recommended Tooling
+- Farm, flock, team, and role-based access management.
+- Offline Android daily logging for mortality, feed consumption, egg collection, and field notes.
+- Secure synchronization of queued records when connectivity returns.
+- Time-stamped photo evidence with best-effort GPS: fresh GPS when available, an honestly labelled last-known location fallback, or an unavailable-location stamp without blocking capture.
+- Private evidence storage, signed image access, and manager review.
+- Web notifications when field records or evidence are synchronized.
+- Farm reports, recent-history views, and flock-scoped PDF exports.
+- Explainable flock trend advisories that compare recent mortality, feed, water, and egg signals with each flock's own baseline, forecast the next two days, and recommend operational checks.
+- Advisory safeguards: insufficient-data states, role-visible data scope, no disease diagnosis, no medication advice, and veterinary escalation guidance for sudden or continuing mortality.
 
-- Python for analytics, automation, and backend work.
-- JupyterLab for notebooks and data exploration.
-- Node.js for web development.
-- Git and GitHub for version control.
-- VS Code or Android Studio depending on the development target.
+## Applications
 
-## Getting Started
+- `apps/api`: TypeScript API server for secure business endpoints.
+- `apps/web`: Owner and manager web dashboard.
+- `apps/mobile`: Android-first React Native app for daily field work and offline sync.
 
-Clone the repository:
+## Packages
+
+- `packages/shared`: Shared domain types and role helpers.
+- `packages/validation`: Shared Zod validation schemas.
+- `packages/supabase`: Supabase admin and client helpers.
+- `packages/sync`: Offline sync contract helpers.
+
+## Setup
+
+1. Install dependencies with `npm install`.
+2. Copy `.env.example` to `.env` and fill values locally.
+3. Apply migrations in `supabase/migrations` to the Supabase project.
+4. Run the API with `npm run dev:api`.
+5. Run the web app with `npm run dev:web`.
+
+Never commit real Supabase secret keys. See `SECURITY.md` before connecting a deployment or GitHub integration.
+
+## License
+
+Copyright (C) 2026 carlohustletv. IQuila is licensed under the GNU General Public License v3.0 only (`GPL-3.0-only`). See `LICENSE`.
+
+You may run, study, modify, and redistribute the source under GPL-3.0 terms. Distributed modified versions must remain under GPL-3.0 and include corresponding source code. The software is provided without warranty.
+
+All application, package, script, and Supabase source is covered by `REUSE.toml`. Primary executable entry points also carry SPDX identifiers. Verify the repository licensing metadata with:
 
 ```bash
-git clone https://github.com/YOUR-USERNAME/IQuila.git
-cd IQuila
+npm run check:license
 ```
 
-Create a Python virtual environment:
-
-```bash
-python -m venv .venv
-.venv\Scripts\activate
-python -m pip install --upgrade pip
-```
-
-Start JupyterLab when working with analytics notebooks:
-
-```bash
-jupyter lab
-```
-
-## Project Status
-
-IQuila is in its initial setup phase. Core files, source code, datasets, notebooks, and deployment documentation will be added as development continues.
-
-## Ownership And Usage
-
-Copyright (c) 2026 carlohustletv. All rights reserved.
-
-This repository and its contents are proprietary unless a license file is added that explicitly grants additional permissions. Do not copy, redistribute, publish, sublicense, or use this work in another project without written permission from the owner.
-
-## Contact
-
-For permission requests, collaboration, or project questions, contact the repository owner through GitHub.
+The GitHub security workflow runs this check for every push and pull request. When distributing an APK, web bundle, or other binary, provide the corresponding source code, build files, Supabase migrations, and this license notice.

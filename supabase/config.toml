@@ -1,0 +1,4 @@
+project_id = "vyvphaxucpzjjmjndbxw"
+
+[functions.flockiq-api]
+verify_jwt = false
