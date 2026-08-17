@@ -550,6 +550,14 @@ label {
 .locationList div { background: #f5f8f3; border-radius: 10px; padding: 10px; }
 .locationList strong, .locationList span { display: block; }
 .locationList span { color: #718074; font-size: 11px; line-height: 1.45; margin-top: 3px; }
+.activityFeed { padding: 24px; }
+.activityFeed select { max-width: 190px; padding: 9px 12px; }
+.activityList { display: grid; margin-top: 18px; }
+.activityItem { align-items: center; border-top: 1px solid #e1e7df; display: grid; gap: 14px; grid-template-columns: 158px minmax(0, 1fr) auto; padding: 13px 0; }
+.activityItem time { color: #718074; font-size: 11px; font-variant-numeric: tabular-nums; }
+.activityItem strong, .activityItem span, .activityItem small { display: block; }
+.activityItem span, .activityItem small { color: #718074; font-size: 12px; margin-top: 3px; }
+.activityItem > .roleTag { color: #1e4d2b; margin: 0; text-transform: capitalize; }
 
 .analyticsBlock {
   display: grid;
@@ -1033,6 +1041,8 @@ label {
   }
   .reportRow { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .reportRow small { grid-column: 1 / -1; }
+  .activityItem { align-items: start; grid-template-columns: 1fr auto; }
+  .activityItem time { grid-column: 1 / -1; }
 }
 
 @media (max-width: 560px) {

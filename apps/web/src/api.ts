@@ -116,6 +116,7 @@ export interface AdminOverview {
     active_location_users: number;
   };
   locations: { user_id: string; full_name: string | null; email: string | null; farm_name: string; latitude: number; longitude: number; accuracy_meters: number | null; captured_at: string; received_at: string }[];
+  activity: { id: string; farm_id: string | null; actor_id: string | null; action: string; entity_table: string; entity_id: string | null; metadata: { source?: string; name?: string; role?: string; status?: string; record_date?: string; reason?: string }; created_at: string; actor: { id: string; full_name: string | null; email: string | null } | null; farm_name: string }[];
 }
 
 export interface Flock {

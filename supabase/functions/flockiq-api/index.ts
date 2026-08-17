@@ -144,7 +144,7 @@ app.get("/api/auth/me", async (c) => {
 app.get("/api/admin/overview", async (c) => {
   const user = c.get("user");
   if (!(await superadmin(user.id))) return apiError(c, 403, "superadmin_required", "Superadmin access required");
-  const [profiles, farms, members, flocks, records, evidence, locationEvidence, authUsers, entitlementAudits] = await Promise.all([
+  const [profiles, farms, members, flocks, records, evidence, locationEvidence, authUsers, entitlementAudits, systemActivity] = await Promise.all([
     admin.from("profiles").select("id, full_name, account_type, membership_status, system_role, created_at").order("created_at", { ascending: false }),
     admin.from("farms").select("id, name, location, created_by, created_at").is("deleted_at", null).order("created_at", { ascending: false }),
     admin.from("farm_members").select("id, farm_id, user_id, role, permissions, accepted_at").is("deleted_at", null),
@@ -154,9 +154,10 @@ app.get("/api/admin/overview", async (c) => {
     admin.from("field_evidence").select("captured_by, farm_id, latitude, longitude, accuracy_meters, device_captured_at, server_received_at")
       .is("deleted_at", null).not("latitude", "is", null).not("longitude", "is", null).order("server_received_at", { ascending: false }).limit(1000),
     admin.auth.admin.listUsers({ page: 1, perPage: 1000 }),
-    admin.from("audit_logs").select("id, actor_id, action, entity_table, entity_id, metadata, created_at").is("farm_id", null).in("action", ["manager_membership_approved", "manager_membership_suspended"]).order("created_at", { ascending: false }).limit(30)
+    admin.from("audit_logs").select("id, actor_id, action, entity_table, entity_id, metadata, created_at").is("farm_id", null).in("action", ["manager_membership_approved", "manager_membership_suspended"]).order("created_at", { ascending: false }).limit(30),
+    admin.from("audit_logs").select("id, farm_id, actor_id, action, entity_table, entity_id, metadata, created_at").order("created_at", { ascending: false }).limit(100)
   ]);
-  const failure = [profiles, farms, members, flocks, records, evidence, locationEvidence, authUsers, entitlementAudits].find((result) => result.error)?.error;
+  const failure = [profiles, farms, members, flocks, records, evidence, locationEvidence, authUsers, entitlementAudits, systemActivity].find((result) => result.error)?.error;
   if (failure) return apiError(c, 500, "admin_overview_failed", "Could not load system overview");
   const emailById = new Map(authUsers.data.users.map((account) => [account.id, account.email]));
   const profileById = new Map(profiles.data.map((profile) => [profile.id, profile]));
@@ -190,7 +191,15 @@ app.get("/api/admin/overview", async (c) => {
       account_types: ["manager", "personnel"].map((account_type) => ({ account_type, count: profiles.data.filter((profile) => profile.account_type === account_type).length })),
       active_location_users: locations.length
     },
-    locations
+    locations,
+    activity: (systemActivity.data ?? []).map((entry) => {
+      const actor = entry.actor_id ? profileById.get(entry.actor_id) : null;
+      return {
+        ...entry,
+        actor: actor ? { id: entry.actor_id, full_name: actor.full_name, email: emailById.get(entry.actor_id) ?? null } : null,
+        farm_name: entry.farm_id ? farmById.get(entry.farm_id)?.name ?? "Deleted farm" : "System"
+      };
+    })
   });
 });
 
