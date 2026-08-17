@@ -103,10 +103,11 @@ export interface DailyReport {
 }
 
 export interface AdminOverview {
-  summary: { users: number; farms: number; memberships: number; flocks: number; daily_records: number; evidence: number };
-  users: { id: string; full_name: string | null; email: string | null; account_type: string; system_role: "user" | "superadmin"; created_at: string }[];
+  summary: { users: number; farms: number; memberships: number; flocks: number; daily_records: number; evidence: number; pending_manager_memberships: number };
+  users: { id: string; full_name: string | null; email: string | null; account_type: string; membership_status: "active" | "pending" | "suspended"; system_role: "user" | "superadmin"; created_at: string }[];
   farms: { id: string; name: string; location: string | null; created_by: string; created_at: string }[];
   memberships: { id: string; farm_id: string; user_id: string | null; role: string; permissions: ModulePermissions; accepted_at: string | null }[];
+  membership_audits: { id: string; actor_id: string | null; action: string; entity_table: string; entity_id: string | null; metadata: { previous_status?: string; new_status?: string; reason?: string }; created_at: string }[];
 }
 
 export interface Flock {

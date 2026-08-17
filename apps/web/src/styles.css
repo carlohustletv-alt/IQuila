@@ -851,6 +851,9 @@ label {
 .roleTag.manager { background: #dcebd9; color: #275a34; }
 .roleTag.worker { background: #fff0d9; color: #855b16; }
 .roleTag.viewer { background: #e8edf2; color: #4b6072; }
+.roleTag.active { background: #d9f0e7; color: #12624f; }
+.roleTag.pending { background: #fff0d9; color: #855b16; }
+.roleTag.suspended { background: #f8dfdb; color: #9f3e31; }
 
 .removeMember {
   background: transparent;

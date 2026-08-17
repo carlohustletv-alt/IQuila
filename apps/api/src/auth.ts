@@ -24,21 +24,24 @@ export async function getFarmRole(
   farmId: string,
   userId: string
 ): Promise<FarmRole | null> {
-  const { data, error } = await supabase
-    .from("farm_members")
-    .select("role, farms!inner(id)")
-    .eq("farm_id", farmId)
-    .eq("user_id", userId)
-    .is("deleted_at", null)
-    .not("accepted_at", "is", null)
-    .is("farms.deleted_at", null)
-    .maybeSingle();
+  const [membership, entitlement] = await Promise.all([
+    supabase
+      .from("farm_members")
+      .select("role, farms!inner(id)")
+      .eq("farm_id", farmId)
+      .eq("user_id", userId)
+      .is("deleted_at", null)
+      .not("accepted_at", "is", null)
+      .is("farms.deleted_at", null)
+      .maybeSingle(),
+    supabase.rpc("is_farm_entitled", { target_farm_id: farmId })
+  ]);
 
-  if (error) {
-    throw error;
+  if (membership.error || entitlement.error) {
+    throw membership.error ?? entitlement.error;
   }
 
-  return (data?.role as FarmRole | undefined) ?? null;
+  return entitlement.data ? (membership.data?.role as FarmRole | undefined) ?? null : null;
 }
 
 export async function requireFarmPermission(

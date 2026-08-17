@@ -209,12 +209,12 @@ app.post("/api/farms", async (c) => {
 
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
-    .select("account_type")
+    .select("account_type, membership_status")
     .eq("id", user.id)
     .maybeSingle();
   if (profileError) return errorResponse(c, 500, "profile_read_failed", profileError.message);
-  if (profile?.account_type !== "manager") {
-    return errorResponse(c, 403, "manager_required", "Only manager accounts can register farms");
+  if (profile?.account_type !== "manager" || profile.membership_status !== "active") {
+    return errorResponse(c, 403, "membership_required", "An active manager membership is required to register farms");
   }
 
   const { data: farm, error: farmError } = await supabase
@@ -259,14 +259,6 @@ app.post("/api/farms/:farmId/members", async (c) => {
   const { data: users, error: usersError } = await supabase.auth.admin.listUsers({ page: 1, perPage: 1000 });
   if (usersError) return errorResponse(c, 500, "users_read_failed", usersError.message);
   const registeredUser = users.users.find((item) => item.email?.toLowerCase() === body.email);
-
-  if (registeredUser && body.role === "manager") {
-    const { error: promoteError } = await supabase
-      .from("profiles")
-      .update({ account_type: "manager" })
-      .eq("id", registeredUser.id);
-    if (promoteError) return errorResponse(c, 500, "manager_promotion_failed", promoteError.message);
-  }
 
   const { data, error } = await supabase
     .from("farm_members")

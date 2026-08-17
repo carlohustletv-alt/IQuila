@@ -204,7 +204,7 @@ function LandingPage({
           <img src="/logo.svg" alt="IQuila" />
           <p className="landingEyebrow">{authMode === "login" ? "Welcome back" : "Start your workspace"}</p>
           <h2 id="auth-title">{authMode === "login" ? "Sign in to IQuila" : "Create your IQuila account"}</h2>
-          <p>{authMode === "login" ? "Your farms, teams, and live operations are waiting." : "Register as a manager and bring your first farm online."}</p>
+          <p>{authMode === "login" ? "Your farms, teams, and live operations are waiting." : "Register as a manager. A verified membership is required before creating farms."}</p>
           <form onSubmit={onSubmit}>
             <label>Email address<input value={email} onChange={(event) => onEmailChange(event.target.value)} type="email" autoComplete="email" required autoFocus /></label>
             <label>Password<input value={password} onChange={(event) => onPasswordChange(event.target.value)} type="password" autoComplete={authMode === "login" ? "current-password" : "new-password"} minLength={6} required /></label>
@@ -416,6 +416,25 @@ function Dashboard({ email, systemRole }: { email: string; systemRole: "user" | 
     }
   }
 
+  async function updateMembershipStatus(userId: string, currentStatus: "active" | "pending" | "suspended") {
+    const membershipStatus = currentStatus === "active" ? "suspended" : "active";
+    const reason = window.prompt(`Reason to ${membershipStatus === "active" ? "approve" : "suspend"} this manager membership:`)?.trim();
+    if (!reason) return;
+    try {
+      const data = await apiRequest<{ profile: { membership_status: "active" | "pending" | "suspended" } }>(`/api/admin/users/${userId}/membership-status`, {
+        method: "PATCH",
+        body: JSON.stringify({ membership_status: membershipStatus, reason })
+      });
+      setAdminOverview((current) => current ? {
+        ...current,
+        users: current.users.map((user) => user.id === userId ? { ...user, membership_status: data.profile.membership_status } : user)
+      } : current);
+      setStatus(`Manager membership ${membershipStatus}.`);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Could not update membership.");
+    }
+  }
+
   const selectedMembership = farms.find((item) => item.farms.id === selectedFarmId);
   const canManageFarm = selectedMembership?.role === "owner" || selectedMembership?.role === "manager";
   const visibleViews = (["dashboard", "farms", "flocks", "team", "evidence", "reports"] as ErpView[]).filter((view) => {
@@ -617,15 +636,15 @@ function Dashboard({ email, systemRole }: { email: string; systemRole: "user" | 
         {activeView === "reports" ? <article className="panel evidencePanel"><div className="panelHeaderRow"><div><div className="panelKicker">{canManageFarm ? "Farm reporting" : "Private reporting history"}</div><h2>{canManageFarm ? "Daily reports" : "Reports submitted by you"}</h2></div><span className="countPill">{reports.length}</span></div><div className="reportTable">{reports.map((report) => <div className="reportRow" key={report.id}><strong>{report.record_date}</strong><span>Mortality {report.mortality_count}</span><span>Feed {report.feed_consumed_kg ?? 0} kg</span><span>Eggs {report.eggs_collected ?? 0}</span><small>{report.notes || "No notes"}</small></div>)}{!reports.length ? <p className="empty">No reports are available yet.</p> : null}</div></article> : null}
       </section> : null}
 
-      {activeView === "admin" && systemRole === "superadmin" ? <SuperadminConsole overview={adminOverview} onToggleRole={toggleSuperadmin} /> : null}
+       {activeView === "admin" && systemRole === "superadmin" ? <SuperadminConsole overview={adminOverview} onToggleRole={toggleSuperadmin} onUpdateMembership={updateMembershipStatus} /> : null}
       </section>
     </main>
   );
 }
 
-function SuperadminConsole({ overview, onToggleRole }: { overview: AdminOverview | null; onToggleRole: (userId: string, role: "user" | "superadmin") => void }) {
+function SuperadminConsole({ overview, onToggleRole, onUpdateMembership }: { overview: AdminOverview | null; onToggleRole: (userId: string, role: "user" | "superadmin") => void; onUpdateMembership: (userId: string, status: "active" | "pending" | "suspended") => void }) {
   if (!overview) return <p className="empty">Loading system overview...</p>;
-  return <section className="adminConsole"><div className="adminMetrics">{Object.entries(overview.summary).map(([key, value]) => <article key={key}><span>{key.replaceAll("_", " ")}</span><strong>{formatNumber(value)}</strong></article>)}</div><article className="panel adminTable"><div className="panelKicker">Identity and access</div><h2>System users</h2>{overview.users.map((user) => <div className="adminUser" key={user.id}><div><strong>{user.full_name || user.email}</strong><small>{user.email} · {user.account_type}</small></div><span className={`roleTag ${user.system_role}`}>{user.system_role}</span><button onClick={() => onToggleRole(user.id, user.system_role)}>{user.system_role === "superadmin" ? "Remove admin" : "Make superadmin"}</button></div>)}</article></section>;
+  return <section className="adminConsole"><div className="adminMetrics">{Object.entries(overview.summary).map(([key, value]) => <article key={key}><span>{key.replaceAll("_", " ")}</span><strong>{formatNumber(value)}</strong></article>)}</div><article className="panel adminTable"><div className="panelKicker">Accounts and membership</div><h2>Manager access</h2>{overview.users.map((user) => <div className="adminUser" key={user.id}><div><strong>{user.full_name || user.email}</strong><small>{user.email} · {user.account_type}</small></div><span className={`roleTag ${user.membership_status}`}>{user.membership_status}</span><span className={`roleTag ${user.system_role}`}>{user.system_role}</span>{user.account_type === "manager" ? <button onClick={() => onUpdateMembership(user.id, user.membership_status)}>{user.membership_status === "active" ? "Suspend membership" : "Approve membership"}</button> : null}<button onClick={() => onToggleRole(user.id, user.system_role)}>{user.system_role === "superadmin" ? "Remove admin" : "Make superadmin"}</button></div>)}</article><article className="panel adminTable"><div className="panelKicker">Entitlement audit</div><h2>Recent membership decisions</h2>{overview.membership_audits.map((audit) => <div className="adminUser" key={audit.id}><div><strong>{audit.action.replaceAll("_", " ")}</strong><small>{new Date(audit.created_at).toLocaleString()} · {audit.metadata.reason || "No reason recorded"}</small></div><span className="roleTag active">{audit.metadata.new_status || "recorded"}</span></div>)}{!overview.membership_audits.length ? <p className="empty">No membership decisions have been recorded.</p> : null}</article></section>;
 }
 
 function formatNumber(value: number) {

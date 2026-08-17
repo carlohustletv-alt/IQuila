@@ -30,6 +30,7 @@ const createFlockSchema = z.object({
 const inviteSchema = z.object({ email: z.email().toLowerCase(), role: z.enum(["manager", "worker", "viewer"]) });
 const permissionsSchema = z.object({ dashboard: z.boolean(), flocks: z.boolean(), team: z.boolean(), evidence: z.boolean(), reports: z.boolean() });
 const systemRoleSchema = z.object({ system_role: z.enum(["user", "superadmin"]) });
+const membershipUpdateSchema = z.object({ membership_status: z.enum(["active", "suspended"]), reason: z.string().trim().min(3).max(500) });
 const dailyRecordSchema = z.object({
   id: uuid.optional(), flock_id: uuid, record_date: z.iso.date(),
   mortality_count: z.number().int().min(0).default(0), culling_count: z.number().int().min(0).default(0),
@@ -69,10 +70,13 @@ function bearer(header?: string) {
 }
 
 async function farmRole(farmId: string, userId: string): Promise<FarmRole | null> {
-  const { data, error } = await admin.from("farm_members").select("role, farms!inner(id)").eq("farm_id", farmId).eq("user_id", userId)
-    .is("deleted_at", null).not("accepted_at", "is", null).is("farms.deleted_at", null).maybeSingle();
-  if (error) throw error;
-  return (data?.role as FarmRole | undefined) ?? null;
+  const [membership, entitlement] = await Promise.all([
+    admin.from("farm_members").select("role, farms!inner(id)").eq("farm_id", farmId).eq("user_id", userId)
+      .is("deleted_at", null).not("accepted_at", "is", null).is("farms.deleted_at", null).maybeSingle(),
+    admin.rpc("is_farm_entitled", { target_farm_id: farmId })
+  ]);
+  if (membership.error || entitlement.error) throw membership.error ?? entitlement.error;
+  return entitlement.data ? (membership.data?.role as FarmRole | undefined) ?? null : null;
 }
 
 async function superadmin(userId: string) {
@@ -125,22 +129,35 @@ app.get("/api/auth/me", async (c) => {
 app.get("/api/admin/overview", async (c) => {
   const user = c.get("user");
   if (!(await superadmin(user.id))) return apiError(c, 403, "superadmin_required", "Superadmin access required");
-  const [profiles, farms, members, flocks, records, evidence, authUsers] = await Promise.all([
-    admin.from("profiles").select("id, full_name, account_type, system_role, created_at").order("created_at", { ascending: false }),
+  const [profiles, farms, members, flocks, records, evidence, authUsers, entitlementAudits] = await Promise.all([
+    admin.from("profiles").select("id, full_name, account_type, membership_status, system_role, created_at").order("created_at", { ascending: false }),
     admin.from("farms").select("id, name, location, created_by, created_at").is("deleted_at", null).order("created_at", { ascending: false }),
     admin.from("farm_members").select("id, farm_id, user_id, role, permissions, accepted_at").is("deleted_at", null),
     admin.from("flocks").select("id", { count: "exact", head: true }).is("deleted_at", null),
     admin.from("daily_records").select("id", { count: "exact", head: true }).is("deleted_at", null),
     admin.from("field_evidence").select("id", { count: "exact", head: true }).is("deleted_at", null),
-    admin.auth.admin.listUsers({ page: 1, perPage: 1000 })
+    admin.auth.admin.listUsers({ page: 1, perPage: 1000 }),
+    admin.from("audit_logs").select("id, actor_id, action, entity_table, entity_id, metadata, created_at").is("farm_id", null).in("action", ["manager_membership_approved", "manager_membership_suspended"]).order("created_at", { ascending: false }).limit(30)
   ]);
-  const failure = [profiles, farms, members, flocks, records, evidence, authUsers].find((result) => result.error)?.error;
+  const failure = [profiles, farms, members, flocks, records, evidence, authUsers, entitlementAudits].find((result) => result.error)?.error;
   if (failure) return apiError(c, 500, "admin_overview_failed", "Could not load system overview");
   const emailById = new Map(authUsers.data.users.map((account) => [account.id, account.email]));
   return c.json({
-    summary: { users: profiles.data.length, farms: farms.data.length, memberships: members.data.length, flocks: flocks.count ?? 0, daily_records: records.count ?? 0, evidence: evidence.count ?? 0 },
-    users: profiles.data.map((profile) => ({ ...profile, email: emailById.get(profile.id) ?? null })), farms: farms.data, memberships: members.data
+    summary: { users: profiles.data.length, farms: farms.data.length, memberships: members.data.length, flocks: flocks.count ?? 0, daily_records: records.count ?? 0, evidence: evidence.count ?? 0, pending_manager_memberships: profiles.data.filter((profile) => profile.account_type === "manager" && profile.membership_status === "pending").length },
+    users: profiles.data.map((profile) => ({ ...profile, email: emailById.get(profile.id) ?? null })), farms: farms.data, memberships: members.data, membership_audits: entitlementAudits.data ?? []
   });
+});
+
+app.patch("/api/admin/users/:userId/membership-status", async (c) => {
+  const actor = c.get("user");
+  if (!(await superadmin(actor.id))) return apiError(c, 403, "superadmin_required", "Superadmin access required");
+  const userId = uuid.parse(c.req.param("userId"));
+  const body = membershipUpdateSchema.parse(await c.req.json());
+  const token = bearer(c.req.header("authorization"));
+  const caller = createClient(supabaseUrl, publishableKey, { global: { headers: { Authorization: `Bearer ${token}` } }, auth: { persistSession: false, autoRefreshToken: false } });
+  const { data, error } = await caller.rpc("set_manager_membership_status", { target_user_id: userId, next_status: body.membership_status, change_reason: body.reason });
+  if (error) return apiError(c, 400, "membership_update_failed", error.message);
+  return c.json({ profile: data });
 });
 
 app.patch("/api/admin/users/:userId/system-role", async (c) => {
@@ -163,21 +180,22 @@ app.get("/api/farms", async (c) => {
     const farm = Array.isArray(item.farms) ? item.farms[0] : item.farms;
     return farm?.created_by ? [farm.created_by] : [];
   });
-  const managers = creatorIds.length ? await admin.from("profiles").select("id, full_name").in("id", creatorIds) : { data: [], error: null };
+  const managers = creatorIds.length ? await admin.from("profiles").select("id, full_name, membership_status").in("id", creatorIds) : { data: [], error: null };
   if (managers.error) return apiError(c, 500, "managers_read_failed", "Could not load farm managers");
-  const names = new Map((managers.data ?? []).map((manager) => [manager.id, manager.full_name]));
-  return c.json({ farms: (data ?? []).map((item) => {
+  const managerById = new Map((managers.data ?? []).map((manager) => [manager.id, manager]));
+  return c.json({ farms: (data ?? []).flatMap((item) => {
     const farm = Array.isArray(item.farms) ? item.farms[0] : item.farms;
-    return { ...item, manager: { id: farm?.created_by ?? null, full_name: farm?.created_by ? names.get(farm.created_by) ?? "Farm manager" : "Farm manager" } };
+    const manager = farm?.created_by ? managerById.get(farm.created_by) : null;
+    return manager?.membership_status === "active" ? [{ ...item, manager: { id: farm?.created_by ?? null, full_name: manager.full_name ?? "Farm manager" } }] : [];
   }) });
 });
 
 app.post("/api/farms", async (c) => {
   const user = c.get("user");
   const body = createFarmSchema.parse(await c.req.json());
-  const profile = await admin.from("profiles").select("account_type").eq("id", user.id).maybeSingle();
+  const profile = await admin.from("profiles").select("account_type, membership_status").eq("id", user.id).maybeSingle();
   if (profile.error) return apiError(c, 500, "profile_read_failed", "Could not load profile");
-  if (profile.data?.account_type !== "manager") return apiError(c, 403, "manager_required", "Only manager accounts can register farms");
+  if (profile.data?.account_type !== "manager" || profile.data.membership_status !== "active") return apiError(c, 403, "membership_required", "An active manager membership is required to register farms");
   const farmResult = await admin.from("farms").insert({ ...body, created_by: user.id }).select("*").single();
   if (farmResult.error) return apiError(c, 500, "farm_create_failed", "Could not create farm");
   const memberResult = await admin.from("farm_members").insert({ farm_id: farmResult.data.id, user_id: user.id, role: "owner", invited_by: user.id, accepted_at: new Date().toISOString() });
@@ -193,10 +211,6 @@ app.post("/api/farms/:farmId/members", async (c) => {
   const users = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
   if (users.error) return apiError(c, 500, "users_read_failed", "Could not search registered users");
   const registered = users.data.users.find((item) => item.email?.toLowerCase() === body.email);
-  if (registered && body.role === "manager") {
-    const promotion = await admin.from("profiles").update({ account_type: "manager" }).eq("id", registered.id);
-    if (promotion.error) return apiError(c, 500, "manager_promotion_failed", "Could not promote manager account");
-  }
   const { data, error } = await admin.from("farm_members").upsert({
     farm_id: farmId, user_id: registered?.id ?? null, invited_email: registered ? null : body.email,
     role: body.role, invited_by: user.id, accepted_at: registered ? new Date().toISOString() : null, deleted_at: null
@@ -250,11 +264,10 @@ app.get("/api/farms/:farmId/evidence", async (c) => {
   const user = c.get("user");
   const farmId = uuid.parse(c.req.param("farmId"));
   const role = await farmRole(farmId, user.id);
-  const isSuperadmin = await superadmin(user.id);
-  if (!role && !isSuperadmin) return apiError(c, 403, "forbidden", "You cannot view evidence for this farm");
+  if (!role) return apiError(c, 403, "forbidden", "You cannot view evidence for this farm");
   let query = admin.from("field_evidence").select("id, farm_id, flock_id, captured_by, storage_path, latitude, longitude, accuracy_meters, device_captured_at, server_received_at, timezone, notes, location_status")
     .eq("farm_id", farmId).is("deleted_at", null).order("device_captured_at", { ascending: false }).limit(500);
-  if (!can(role, "manage") && !isSuperadmin) query = query.eq("captured_by", user.id);
+  if (!can(role, "manage")) query = query.eq("captured_by", user.id);
   const result = await query;
   if (result.error) return apiError(c, 500, "evidence_read_failed", "Could not load field evidence");
   const paths = result.data.map((item) => item.storage_path);
@@ -270,12 +283,11 @@ app.get("/api/farms/:farmId/daily-records", async (c) => {
   const user = c.get("user");
   const farmId = uuid.parse(c.req.param("farmId"));
   const role = await farmRole(farmId, user.id);
-  const isSuperadmin = await superadmin(user.id);
-  if (!role && !isSuperadmin) return apiError(c, 403, "forbidden", "You cannot view reports for this farm");
+  if (!role) return apiError(c, 403, "forbidden", "You cannot view reports for this farm");
   let query = admin.from("daily_records")
     .select("id, farm_id, flock_id, record_date, mortality_count, culling_count, feed_consumed_kg, water_consumed_liters, eggs_collected, average_weight_grams, notes, idempotency_key, created_by, created_at, updated_at")
     .eq("farm_id", farmId).is("deleted_at", null).order("record_date", { ascending: false }).limit(500);
-  if (!can(role, "manage") && !isSuperadmin) query = query.eq("created_by", user.id);
+  if (!can(role, "manage")) query = query.eq("created_by", user.id);
   const { data, error } = await query;
   if (error) return apiError(c, 500, "daily_records_read_failed", "Could not load reports");
   return c.json({ daily_records: data });
