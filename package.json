@@ -16,6 +16,7 @@
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
+    "check:license": "node scripts/check-license.mjs",
     "seed:demo": "node scripts/seed-demo-data.mjs",
     "test:roles": "node scripts/test-role-isolation.mjs",
     "test:mobile-supabase": "node scripts/test-mobile-supabase.mjs",

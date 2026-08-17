@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 carlohustletv
+// SPDX-License-Identifier: GPL-3.0-only
+
 import type { Session } from "@supabase/supabase-js";
 import { lazy, Suspense, useDeferredValue, useEffect, useRef, useState, type FormEvent } from "react";
 import { createRoot } from "react-dom/client";

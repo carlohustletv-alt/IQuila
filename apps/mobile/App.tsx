@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 carlohustletv
+// SPDX-License-Identifier: GPL-3.0-only
+
 import type { Session } from "@supabase/supabase-js";
 import { useEffect, useRef, useState } from "react";
 import { Alert, Image, PermissionsAndroid, Platform, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";

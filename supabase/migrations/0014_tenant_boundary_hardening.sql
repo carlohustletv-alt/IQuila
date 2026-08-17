@@ -1,3 +1,6 @@
+-- SPDX-FileCopyrightText: 2026 carlohustletv
+-- SPDX-License-Identifier: GPL-3.0-only
+
 -- Enforce the same canonical evidence path for direct inserts and RPC-based uploads.
 create or replace function public.enforce_field_evidence_storage_path()
 returns trigger

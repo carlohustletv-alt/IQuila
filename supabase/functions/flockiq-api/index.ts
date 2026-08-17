@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 carlohustletv
+// SPDX-License-Identifier: GPL-3.0-only
+
 import { createClient, type User } from "@supabase/supabase-js";
 import { Hono, type Context } from "hono";
 import { cors } from "hono/cors";

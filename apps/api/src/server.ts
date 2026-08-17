@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 carlohustletv
+// SPDX-License-Identifier: GPL-3.0-only
+
 import { createSupabaseAdminClient } from "@flockiq/supabase";
 import {
   createFarmSchema,
