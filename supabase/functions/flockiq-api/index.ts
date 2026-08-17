@@ -4,6 +4,7 @@ import { cors } from "hono/cors";
 import { z } from "zod";
 
 type FarmRole = "owner" | "manager" | "worker" | "viewer";
+type FarmModule = "dashboard" | "flocks" | "team" | "evidence" | "reports";
 type Variables = { user: User };
 type RateBucket = { startedAt: number; count: number };
 
@@ -77,6 +78,13 @@ async function farmRole(farmId: string, userId: string): Promise<FarmRole | null
   ]);
   if (membership.error || entitlement.error) throw membership.error ?? entitlement.error;
   return entitlement.data ? (membership.data?.role as FarmRole | undefined) ?? null : null;
+}
+
+async function farmModule(farmId: string, userId: string, module: FarmModule) {
+  const { data, error } = await admin.from("farm_members").select("permissions").eq("farm_id", farmId).eq("user_id", userId)
+    .is("deleted_at", null).not("accepted_at", "is", null).maybeSingle();
+  if (error) throw error;
+  return Boolean((data?.permissions as Record<string, unknown> | null)?.[module]);
 }
 
 async function superadmin(userId: string) {
@@ -172,7 +180,7 @@ app.get("/api/admin/users", async (c) => {
   if (!(await superadmin(user.id))) return apiError(c, 403, "superadmin_required", "Superadmin access required");
   const query = z.object({ page: z.coerce.number().int().min(0).max(10_000).default(0), search: z.string().trim().max(100).default("") }).parse(c.req.query());
   const pageSize = 50;
-  const search = query.search.replace(/[%_,()]/g, "");
+  const search = query.search.replace(/[^a-zA-Z0-9@.+ -]/g, "");
   let request = admin.from("profiles").select("id, full_name, email, account_type, membership_status, system_role, created_at", { count: "estimated" }).order("created_at", { ascending: false });
   if (search) request = request.or(`full_name.ilike.%${search}%,email.ilike.%${search}%`);
   const { data, error, count } = await request.range(query.page * pageSize, query.page * pageSize + pageSize - 1);
@@ -196,7 +204,10 @@ app.patch("/api/admin/users/:userId/membership-status", async (c) => {
   const token = bearer(c.req.header("authorization"));
   const caller = createClient(supabaseUrl, publishableKey, { global: { headers: { Authorization: `Bearer ${token}` } }, auth: { persistSession: false, autoRefreshToken: false } });
   const { data, error } = await caller.rpc("set_manager_membership_status", { target_user_id: userId, next_status: body.membership_status, change_reason: body.reason });
-  if (error) return apiError(c, 400, "membership_update_failed", error.message);
+  if (error) {
+    console.error("membership_update_failed", error);
+    return apiError(c, 400, "membership_update_failed", "Could not update manager membership");
+  }
   return c.json({ profile: data });
 });
 
@@ -304,7 +315,7 @@ app.get("/api/farms/:farmId/evidence", async (c) => {
   const user = c.get("user");
   const farmId = uuid.parse(c.req.param("farmId"));
   const role = await farmRole(farmId, user.id);
-  if (!role) return apiError(c, 403, "forbidden", "You cannot view evidence for this farm");
+  if (!role || !(await farmModule(farmId, user.id, "evidence"))) return apiError(c, 403, "forbidden", "You cannot view evidence for this farm");
   let query = admin.from("field_evidence").select("id, farm_id, flock_id, captured_by, storage_path, latitude, longitude, accuracy_meters, device_captured_at, server_received_at, timezone, notes, location_status")
     .eq("farm_id", farmId).is("deleted_at", null).order("device_captured_at", { ascending: false }).limit(500);
   if (!can(role, "manage")) query = query.eq("captured_by", user.id);
@@ -352,7 +363,7 @@ app.post("/api/farms/:farmId/daily-records", async (c) => {
 app.get("/api/farms/:farmId/flocks", async (c) => {
   const user = c.get("user");
   const farmId = uuid.parse(c.req.param("farmId"));
-  if (!can(await farmRole(farmId, user.id), "read")) return apiError(c, 403, "forbidden", "You cannot view this farm");
+  if (!can(await farmRole(farmId, user.id), "read") || !(await farmModule(farmId, user.id, "flocks"))) return apiError(c, 403, "forbidden", "You cannot view this farm");
   const { data, error } = await admin.from("flocks").select("*").eq("farm_id", farmId).is("deleted_at", null).order("created_at", { ascending: false });
   if (error) return apiError(c, 500, "flocks_read_failed", "Could not load flocks");
   return c.json({ flocks: data });
@@ -361,7 +372,7 @@ app.get("/api/farms/:farmId/flocks", async (c) => {
 app.post("/api/farms/:farmId/flocks", async (c) => {
   const user = c.get("user");
   const farmId = uuid.parse(c.req.param("farmId"));
-  if (!can(await farmRole(farmId, user.id), "manage")) return apiError(c, 403, "forbidden", "You cannot manage flocks for this farm");
+  if (!can(await farmRole(farmId, user.id), "manage") || !(await farmModule(farmId, user.id, "flocks"))) return apiError(c, 403, "forbidden", "You cannot manage flocks for this farm");
   const body = createFlockSchema.parse(await c.req.json());
   const { data, error } = await admin.from("flocks").insert({ ...body, farm_id: farmId, current_count: body.initial_count, created_by: user.id }).select("*").single();
   if (error) return apiError(c, 500, "flock_create_failed", "Could not create flock");
@@ -371,7 +382,7 @@ app.post("/api/farms/:farmId/flocks", async (c) => {
 app.get("/api/farms/:farmId/dashboard", async (c) => {
   const user = c.get("user");
   const farmId = uuid.parse(c.req.param("farmId"));
-  if (!can(await farmRole(farmId, user.id), "manage")) return apiError(c, 403, "forbidden", "Only owners and managers can view farm-wide analytics");
+  if (!can(await farmRole(farmId, user.id), "manage") || !(await farmModule(farmId, user.id, "dashboard"))) return apiError(c, 403, "forbidden", "Only owners and managers can view farm-wide analytics");
   const [farm, members, units, flocksResult, recordsResult, audit] = await Promise.all([
     admin.from("farms").select("id, name, location, notes, created_at").eq("id", farmId).single(),
     admin.from("farm_members").select("id, role, accepted_at, created_at").eq("farm_id", farmId).is("deleted_at", null),
