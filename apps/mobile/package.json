@@ -13,7 +13,7 @@
   "dependencies": {
     "@flockiq/shared": "*",
     "@flockiq/sync": "*",
-    "@react-native-async-storage/async-storage": "^2.1.2",
+    "@react-native-async-storage/async-storage": "^3.1.1",
     "@supabase/supabase-js": "^2.56.0",
     "base64-arraybuffer": "^1.0.2",
     "react": "19.0.0",
